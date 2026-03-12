@@ -111,6 +111,35 @@ TestFailure:
 4. Parses XML files, aggregates failures
 5. Renders results page
 
+### Testing Strategy
+
+**Framework**: Minitest
+
+**Layers**:
+- **Unit tests**: XML parsing, aggregation logic (pure functions, no mocking)
+- **Integration tests**: GitHub API client (VCR cassettes to record/replay HTTP)
+- **Request specs**: Sinatra routes (Rack::Test)
+
+**Structure**:
+```
+test/
+  lib/
+    junit_parser_test.rb
+    failure_aggregator_test.rb
+    github_client_test.rb
+  routes/
+    pr_analysis_test.rb
+  fixtures/
+    cassettes/
+    junit_samples/
+```
+
+**Approach**:
+- Heavy coverage on parsing and aggregation (core logic)
+- VCR for GitHub API (avoids rate limits, deterministic)
+- Light request specs (verify routing and response format)
+- Skip browser/E2E testing (minimal frontend)
+
 ### Open Questions
 
 1. **Scope**: Analyze all workflow runs or only latest commit?
