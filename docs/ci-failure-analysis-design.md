@@ -98,15 +98,11 @@ TestFailure:
 
 ### Implementation Language
 
-**Option A: Ruby**
-- Pros: Native to dd-trace-rb workflow, Nokogiri for XML, Sinatra for web
-- Cons: May need bundler setup
-
-**Option B: Python**
-- Pros: Rich ecosystem (requests, lxml, flask), easier standalone tool
-- Cons: Extra dependency for Ruby developers
-
-**Recommendation**: Start with Python for rapid development, can port to Ruby later if needed.
+**Ruby**
+- Nokogiri for XML parsing
+- Sinatra for web interface
+- Octokit for GitHub API (or shell out to `gh`)
+- Consistent with dd-trace-rb development environment
 
 ### CLI Interface
 
