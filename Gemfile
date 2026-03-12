@@ -14,4 +14,5 @@ group :development, :test do
   gem "rack-test"
   gem "vcr"
   gem "webmock"
+  gem "rerun"
 end

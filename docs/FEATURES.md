@@ -20,6 +20,11 @@ Analyze test failures in dd-trace-rb pull requests.
 
 **Usage:**
 ```bash
+# Production
 bundle exec puma
-# Visit http://localhost:9292/pr/12345
+
+# Development (auto-reload on file changes)
+bundle exec rerun -- puma
+
+# Visit http://localhost:9292
 ```
