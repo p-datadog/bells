@@ -2,7 +2,7 @@
 Gemfile.lock
 
 # Cache
-cache/
+.cache/
 
 # Environment
 .env

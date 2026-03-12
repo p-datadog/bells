@@ -9,13 +9,19 @@ This document tracks major features in bells.
 Analyze test failures in dd-trace-rb pull requests.
 
 **Routes:**
-- `GET /` - Home page with PR input form and list of open PRs
+- `GET /` - Home page with PR input form, list of open PRs, and CI status
 - `GET /?author=<login>` - Filter PRs by author
 - `GET /pr/:number` - Analyze PR and display aggregated failures
 - `GET /api/pr/:number` - JSON API for PR analysis
 
+**CI Status:**
+- Green - All checks passed
+- Pending - In progress, no failures yet
+- Pending (failing) - In progress, some already failed
+- Failed - Completed with failures
+
 **Components:**
-- `Bells::GitHubClient` - Fetches workflow runs and downloads JUnit artifacts
+- `Bells::GitHubClient` - Fetches workflow runs, CI status, and downloads JUnit artifacts
 - `Bells::JunitParser` - Parses JUnit XML files to extract test failures
 - `Bells::FailureAggregator` - Groups failures by test, identifies flaky tests
 

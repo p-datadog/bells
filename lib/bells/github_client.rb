@@ -21,6 +21,23 @@ module Bells
       @client.pull_requests(REPO, state: state, per_page: per_page)
     end
 
+    def ci_status(sha)
+      check_runs = @client.check_runs_for_ref(REPO, sha)[:check_runs]
+      return :unknown if check_runs.empty?
+
+      conclusions = check_runs.map(&:conclusion)
+      statuses = check_runs.map(&:status)
+
+      has_failures = conclusions.include?("failure")
+      all_complete = statuses.all? { |s| s == "completed" }
+
+      if all_complete
+        has_failures ? :failed : :green
+      else
+        has_failures ? :pending_failing : :pending_clean
+      end
+    end
+
     def workflow_runs_for_pr(pr_number)
       pr = @client.pull_request(REPO, pr_number)
       head_sha = pr.head.sha

@@ -58,7 +58,7 @@ Web App → GitHub API → Cache → Parser → Aggregator → UI
 - **Auth**: Use existing `gh` authentication or GitHub token
 
 #### 2. Artifact Processing
-- **Storage**: Server-side cache directory (`cache/<pr-number>/`)
+- **Storage**: Server-side cache directory (`.cache/<pr-number>/`)
 - **Parser**: Nokogiri
 - **Data Model**:
 ```

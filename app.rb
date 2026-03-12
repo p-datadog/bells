@@ -17,6 +17,7 @@ get "/" do
   @authors = all_prs.map { |pr| pr.user.login }.uniq.sort
   @author_filter = params[:author]
   @pull_requests = @author_filter ? all_prs.select { |pr| pr.user.login == @author_filter } : all_prs
+  @ci_status = @pull_requests.to_h { |pr| [pr.number, client.ci_status(pr.head.sha)] }
   erb :index
 end
 

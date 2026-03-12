@@ -16,6 +16,65 @@ RSpec.describe Bells::GitHubClient do
     end
   end
 
+  describe "#ci_status" do
+    let(:octokit_client) { instance_double(Octokit::Client) }
+
+    before do
+      allow(Octokit::Client).to receive(:new).and_return(octokit_client)
+      allow(octokit_client).to receive(:auto_paginate=)
+    end
+
+    it "returns :green when all checks pass" do
+      allow(octokit_client).to receive(:check_runs_for_ref).and_return(
+        check_runs: [
+          OpenStruct.new(status: "completed", conclusion: "success"),
+          OpenStruct.new(status: "completed", conclusion: "success")
+        ]
+      )
+      client = described_class.new
+      expect(client.ci_status("abc123")).to eq(:green)
+    end
+
+    it "returns :failed when checks complete with failures" do
+      allow(octokit_client).to receive(:check_runs_for_ref).and_return(
+        check_runs: [
+          OpenStruct.new(status: "completed", conclusion: "success"),
+          OpenStruct.new(status: "completed", conclusion: "failure")
+        ]
+      )
+      client = described_class.new
+      expect(client.ci_status("abc123")).to eq(:failed)
+    end
+
+    it "returns :pending_clean when in progress with no failures" do
+      allow(octokit_client).to receive(:check_runs_for_ref).and_return(
+        check_runs: [
+          OpenStruct.new(status: "completed", conclusion: "success"),
+          OpenStruct.new(status: "in_progress", conclusion: nil)
+        ]
+      )
+      client = described_class.new
+      expect(client.ci_status("abc123")).to eq(:pending_clean)
+    end
+
+    it "returns :pending_failing when in progress with failures" do
+      allow(octokit_client).to receive(:check_runs_for_ref).and_return(
+        check_runs: [
+          OpenStruct.new(status: "completed", conclusion: "failure"),
+          OpenStruct.new(status: "in_progress", conclusion: nil)
+        ]
+      )
+      client = described_class.new
+      expect(client.ci_status("abc123")).to eq(:pending_failing)
+    end
+
+    it "returns :unknown when no check runs exist" do
+      allow(octokit_client).to receive(:check_runs_for_ref).and_return(check_runs: [])
+      client = described_class.new
+      expect(client.ci_status("abc123")).to eq(:unknown)
+    end
+  end
+
   describe "#workflow_runs_for_pr" do
     it "fetches workflow runs for a PR", :vcr do
       runs = client.workflow_runs_for_pr(5431)

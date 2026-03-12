@@ -19,6 +19,7 @@ RSpec.describe "PR Analysis Routes" do
         title: "Test PR",
         html_url: "https://github.com/DataDog/dd-trace-rb/pull/999",
         user: OpenStruct.new(login: "testuser"),
+        head: OpenStruct.new(sha: "abc123"),
         updated_at: Time.now
       )
     end
@@ -26,9 +27,10 @@ RSpec.describe "PR Analysis Routes" do
     before do
       allow(Bells::GitHubClient).to receive(:new).and_return(mock_client)
       allow(mock_client).to receive(:pull_requests).and_return([mock_pr])
+      allow(mock_client).to receive(:ci_status).with("abc123").and_return(:green)
     end
 
-    it "renders the index page with PR list" do
+    it "renders the index page with PR list and CI status" do
       get "/"
 
       expect(last_response).to be_ok
@@ -37,6 +39,7 @@ RSpec.describe "PR Analysis Routes" do
       expect(last_response.body).to include("Open Pull Requests")
       expect(last_response.body).to include("Test PR")
       expect(last_response.body).to include("testuser")
+      expect(last_response.body).to include("Green")
     end
 
     it "filters PRs by author" do

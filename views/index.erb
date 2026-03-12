@@ -23,6 +23,7 @@
         <th>#</th>
         <th>Title</th>
         <th>Author</th>
+        <th>CI</th>
         <th>Updated</th>
         <th></th>
       </tr>
@@ -33,6 +34,7 @@
         <td><%= pr.number %></td>
         <td><a href="<%= pr.html_url %>"><%= pr.title %></a></td>
         <td><%= pr.user.login %></td>
+        <td><span class="ci-status ci-<%= @ci_status[pr.number] %>"><%= {green: "Green", pending_clean: "Pending", pending_failing: "Pending (failing)", failed: "Failed", unknown: "Unknown"}[@ci_status[pr.number]] %></span></td>
         <td><%= pr.updated_at.strftime("%Y-%m-%d") %></td>
         <td><a href="/pr/<%= pr.number %>">Analyze</a></td>
       </tr>
