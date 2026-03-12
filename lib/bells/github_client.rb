@@ -1,15 +1,19 @@
 # frozen_string_literal: true
 
 require "octokit"
+require "faraday"
+require "faraday/follow_redirects"
+require "zip"
 require "fileutils"
 
 module Bells
   class GitHubClient
     REPO = "DataDog/dd-trace-rb"
 
-    def initialize(token: ENV["GITHUB_TOKEN"])
-      @token = token
-      @client = Octokit::Client.new(access_token: token)
+    def initialize(token: nil)
+      @token = token || ENV["GITHUB_TOKEN"] || `gh auth token 2>/dev/null`.strip
+      @token = nil if @token.empty?
+      @client = Octokit::Client.new(access_token: @token)
       @client.auto_paginate = false
     end
 
@@ -53,27 +57,40 @@ module Bells
       artifact_path = File.join(cache_dir, "#{run.id}_#{artifact.name}")
       return artifact_path if Dir.exist?(artifact_path)
 
-      FileUtils.mkdir_p(artifact_path)
+      zip_path = "#{artifact_path}.zip"
+      url = "https://api.github.com/repos/#{REPO}/actions/artifacts/#{artifact.id}/zip"
 
-      result = system(
-        "gh", "run", "download", run.id.to_s,
-        "-R", REPO,
-        "-n", artifact.name,
-        "-D", artifact_path,
-        out: File::NULL,
-        err: File::NULL
-      )
+      conn = Faraday.new do |f|
+        f.response :follow_redirects
+      end
 
-      unless result
-        warn "Failed to download artifact #{artifact.name} from run #{run.id}"
-        FileUtils.rm_rf(artifact_path)
+      response = conn.get(url) do |req|
+        req.headers["Authorization"] = "Bearer #{@token}" if @token
+        req.headers["Accept"] = "application/vnd.github+json"
+      end
+
+      unless response.success?
+        warn "Failed to download artifact #{artifact.name}: HTTP #{response.status}"
         return nil
       end
+
+      File.binwrite(zip_path, response.body)
+      extract_zip(zip_path, artifact_path)
+      FileUtils.rm_f(zip_path)
 
       artifact_path
     rescue => e
       warn "Failed to download artifact #{artifact.id}: #{e.message}"
       nil
+    end
+
+    def extract_zip(zip_path, dest_dir)
+      FileUtils.mkdir_p(dest_dir)
+      Zip::File.open(zip_path) do |zip|
+        zip.each do |entry|
+          entry.extract(File.join(dest_dir, entry.name)) { true }
+        end
+      end
     end
   end
 end
