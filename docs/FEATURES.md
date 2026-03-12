@@ -10,6 +10,7 @@ Analyze test failures in dd-trace-rb pull requests.
 
 **Routes:**
 - `GET /` - Home page with PR input form and list of open PRs
+- `GET /?author=<login>` - Filter PRs by author
 - `GET /pr/:number` - Analyze PR and display aggregated failures
 - `GET /api/pr/:number` - JSON API for PR analysis
 

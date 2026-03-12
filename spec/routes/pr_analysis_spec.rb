@@ -36,6 +36,21 @@ RSpec.describe "PR Analysis Routes" do
       expect(last_response.body).to include("Analyze Pull Request")
       expect(last_response.body).to include("Open Pull Requests")
       expect(last_response.body).to include("Test PR")
+      expect(last_response.body).to include("testuser")
+    end
+
+    it "filters PRs by author" do
+      get "/?author=testuser"
+
+      expect(last_response).to be_ok
+      expect(last_response.body).to include("Test PR")
+    end
+
+    it "shows no PRs when filtering by unknown author" do
+      get "/?author=unknownuser"
+
+      expect(last_response).to be_ok
+      expect(last_response.body).not_to include("Test PR")
     end
   end
 

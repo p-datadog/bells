@@ -13,7 +13,10 @@ end
 
 get "/" do
   client = Bells::GitHubClient.new
-  @pull_requests = client.pull_requests
+  all_prs = client.pull_requests
+  @authors = all_prs.map { |pr| pr.user.login }.uniq.sort
+  @author_filter = params[:author]
+  @pull_requests = @author_filter ? all_prs.select { |pr| pr.user.login == @author_filter } : all_prs
   erb :index
 end
 

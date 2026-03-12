@@ -11,6 +11,12 @@
 
 <div class="card">
   <h2>Open Pull Requests</h2>
+  <div class="filters">
+    <a href="/"<%= ' class="active"' unless @author_filter %>>All</a>
+    <% @authors.each do |author| %>
+      <a href="/?author=<%= author %>"<%= ' class="active"' if @author_filter == author %>><%= author %></a>
+    <% end %>
+  </div>
   <table>
     <thead>
       <tr>
