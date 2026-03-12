@@ -113,7 +113,7 @@ TestFailure:
 
 ### Testing Strategy
 
-**Framework**: Minitest
+**Framework**: RSpec
 
 **Layers**:
 - **Unit tests**: XML parsing, aggregation logic (pure functions, no mocking)
@@ -122,13 +122,13 @@ TestFailure:
 
 **Structure**:
 ```
-test/
+spec/
   lib/
-    junit_parser_test.rb
-    failure_aggregator_test.rb
-    github_client_test.rb
+    junit_parser_spec.rb
+    failure_aggregator_spec.rb
+    github_client_spec.rb
   routes/
-    pr_analysis_test.rb
+    pr_analysis_spec.rb
   fixtures/
     cassettes/
     junit_samples/
