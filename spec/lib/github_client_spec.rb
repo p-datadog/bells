@@ -25,7 +25,7 @@ RSpec.describe Bells::GitHubClient do
     end
 
     it "returns :green when all checks pass" do
-      allow(octokit_client).to receive(:check_runs_for_ref).and_return(
+      allow(octokit_client).to receive(:paginate).and_yield(
         check_runs: [
           OpenStruct.new(status: "completed", conclusion: "success"),
           OpenStruct.new(status: "completed", conclusion: "success")
@@ -36,7 +36,7 @@ RSpec.describe Bells::GitHubClient do
     end
 
     it "returns :failed when checks complete with failures" do
-      allow(octokit_client).to receive(:check_runs_for_ref).and_return(
+      allow(octokit_client).to receive(:paginate).and_yield(
         check_runs: [
           OpenStruct.new(status: "completed", conclusion: "success"),
           OpenStruct.new(status: "completed", conclusion: "failure")
@@ -47,7 +47,7 @@ RSpec.describe Bells::GitHubClient do
     end
 
     it "returns :pending_clean when in progress with no failures" do
-      allow(octokit_client).to receive(:check_runs_for_ref).and_return(
+      allow(octokit_client).to receive(:paginate).and_yield(
         check_runs: [
           OpenStruct.new(status: "completed", conclusion: "success"),
           OpenStruct.new(status: "in_progress", conclusion: nil)
@@ -58,7 +58,7 @@ RSpec.describe Bells::GitHubClient do
     end
 
     it "returns :pending_failing when in progress with failures" do
-      allow(octokit_client).to receive(:check_runs_for_ref).and_return(
+      allow(octokit_client).to receive(:paginate).and_yield(
         check_runs: [
           OpenStruct.new(status: "completed", conclusion: "failure"),
           OpenStruct.new(status: "in_progress", conclusion: nil)
@@ -69,7 +69,7 @@ RSpec.describe Bells::GitHubClient do
     end
 
     it "returns :unknown when no check runs exist" do
-      allow(octokit_client).to receive(:check_runs_for_ref).and_return(check_runs: [])
+      allow(octokit_client).to receive(:paginate).and_yield(check_runs: [])
       client = described_class.new
       expect(client.ci_status("abc123")).to eq(:unknown)
     end
