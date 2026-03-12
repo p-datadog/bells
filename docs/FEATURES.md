@@ -4,4 +4,22 @@ This document tracks major features in bells.
 
 ---
 
-_No features yet._
+## CI Failure Analysis
+
+Analyze test failures in dd-trace-rb pull requests.
+
+**Routes:**
+- `GET /` - Home page with PR input form
+- `GET /pr/:number` - Analyze PR and display aggregated failures
+- `GET /api/pr/:number` - JSON API for PR analysis
+
+**Components:**
+- `Bells::GitHubClient` - Fetches workflow runs and downloads JUnit artifacts
+- `Bells::JunitParser` - Parses JUnit XML files to extract test failures
+- `Bells::FailureAggregator` - Groups failures by test, identifies flaky tests
+
+**Usage:**
+```bash
+bundle exec puma
+# Visit http://localhost:9292/pr/12345
+```

@@ -1,0 +1,77 @@
+<h1>PR #<%= @pr_number %> - Failure Analysis</h1>
+<p><a href="/">Back</a> | <a href="https://github.com/DataDog/dd-trace-rb/pull/<%= @pr_number %>">View on GitHub</a></p>
+
+<div class="card">
+  <h2>Summary</h2>
+  <div class="summary">
+    <div class="stat">
+      <div class="stat-value"><%= @results[:total_failures] %></div>
+      <div class="stat-label">Total Failures</div>
+    </div>
+    <div class="stat">
+      <div class="stat-value"><%= @results[:unique_tests] %></div>
+      <div class="stat-label">Unique Tests</div>
+    </div>
+    <div class="stat">
+      <div class="stat-value"><%= @results[:flaky_tests] %></div>
+      <div class="stat-label">Flaky Tests</div>
+    </div>
+  </div>
+</div>
+
+<% if @results[:aggregated].any? %>
+<div class="card">
+  <h2>Failed Tests</h2>
+  <input type="text" class="search" placeholder="Filter tests...">
+  <table>
+    <thead>
+      <tr>
+        <th>Test</th>
+        <th>Failures</th>
+        <th>Status</th>
+      </tr>
+    </thead>
+    <tbody>
+      <% @results[:aggregated].each do |failure| %>
+      <tr class="expandable">
+        <td>
+          <strong><%= failure.test_class %></strong><br>
+          <code><%= failure.test_name %></code>
+        </td>
+        <td><%= failure.failure_count %></td>
+        <td>
+          <% if failure.flaky? %>
+            <span class="badge badge-flaky">Flaky</span>
+          <% end %>
+        </td>
+      </tr>
+      <tr class="details">
+        <td colspan="3">
+          <% failure.instances.each_with_index do |instance, i| %>
+            <h4>Instance <%= i + 1 %></h4>
+            <% if instance.failure_message %>
+              <p><strong>Message:</strong> <%= instance.failure_message %></p>
+            <% end %>
+            <% if instance.stack_trace && !instance.stack_trace.empty? %>
+              <pre><%= instance.stack_trace %></pre>
+            <% end %>
+            <% if instance.build_context %>
+              <p><small>
+                Run: <%= instance.build_context.run_id %>
+                <% if instance.build_context.job_name %>
+                  | Job: <%= instance.build_context.job_name %>
+                <% end %>
+              </small></p>
+            <% end %>
+          <% end %>
+        </td>
+      </tr>
+      <% end %>
+    </tbody>
+  </table>
+</div>
+<% else %>
+<div class="card">
+  <p>No test failures found for this PR.</p>
+</div>
+<% end %>

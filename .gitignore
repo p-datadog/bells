@@ -1,0 +1,15 @@
+# Dependencies
+Gemfile.lock
+
+# Cache
+cache/
+
+# Environment
+.env
+
+# IDE
+.idea/
+.vscode/
+
+# Coverage
+coverage/
