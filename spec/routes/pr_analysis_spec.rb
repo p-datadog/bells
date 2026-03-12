@@ -58,6 +58,8 @@ RSpec.describe "PR Analysis Routes" do
   end
 
   describe "GET /pr/:number" do
+    let(:mock_client) { instance_double(Bells::GitHubClient) }
+    let(:mock_pr) { OpenStruct.new(title: "Test PR Title", head: OpenStruct.new(sha: "abc123")) }
     let(:mock_job_failure) do
       Bells::FailureCategorizer::JobFailure.new(
         job_name: "steep/typecheck",
@@ -69,6 +71,9 @@ RSpec.describe "PR Analysis Routes" do
     end
 
     before do
+      allow(Bells::GitHubClient).to receive(:new).and_return(mock_client)
+      allow(mock_client).to receive(:pull_request).with(123).and_return(mock_pr)
+      allow(mock_client).to receive(:ci_status).with("abc123").and_return(:failed)
       allow(Bells).to receive(:analyze_pr).with(123).and_return(
         categorized_failures: { type_check: [mock_job_failure] },
         test_details: { total_failures: 0, unique_tests: 0, flaky_tests: 0, aggregated: [] },
@@ -81,6 +86,8 @@ RSpec.describe "PR Analysis Routes" do
 
       expect(last_response).to be_ok
       expect(last_response.body).to include("PR #123")
+      expect(last_response.body).to include("Test PR Title")
+      expect(last_response.body).to include("Failed")
       expect(last_response.body).to include("Failed Jobs")
       expect(last_response.body).to include("Type Check")
       expect(last_response.body).to include("steep/typecheck")

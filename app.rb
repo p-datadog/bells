@@ -23,6 +23,10 @@ end
 
 get "/pr/:number" do
   @pr_number = params[:number].to_i
+  client = Bells::GitHubClient.new
+  pr = client.pull_request(@pr_number)
+  @pr_title = pr.title
+  @ci_status = client.ci_status(pr.head.sha)
   @results = Bells.analyze_pr(@pr_number)
   erb :pr_analysis
 end

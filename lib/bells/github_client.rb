@@ -21,6 +21,10 @@ module Bells
       @client.pull_requests(REPO, state: state, per_page: per_page)
     end
 
+    def pull_request(pr_number)
+      @client.pull_request(REPO, pr_number)
+    end
+
     def ci_status(sha)
       all_check_runs = []
 
