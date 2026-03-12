@@ -50,6 +50,29 @@ module Bells
       workflow_runs_for_pr(pr_number).select { |run| run.conclusion == "failure" }
     end
 
+    def failed_jobs_for_pr(pr_number)
+      pr = @client.pull_request(REPO, pr_number)
+      check_runs = @client.check_runs_for_ref(REPO, pr.head.sha)[:check_runs]
+      check_runs.select { |run| run.conclusion == "failure" }
+    end
+
+    def job_logs(job_id)
+      url = "https://api.github.com/repos/#{REPO}/actions/jobs/#{job_id}/logs"
+
+      conn = Faraday.new do |f|
+        f.response :follow_redirects
+      end
+
+      response = conn.get(url) do |req|
+        req.headers["Authorization"] = "Bearer #{@token}" if @token
+        req.headers["Accept"] = "application/vnd.github+json"
+      end
+
+      response.success? ? response.body : nil
+    rescue
+      nil
+    end
+
     def download_junit_artifacts(pr_number, cache_dir:)
       pr_cache = File.join(cache_dir, pr_number.to_s)
       FileUtils.mkdir_p(pr_cache)

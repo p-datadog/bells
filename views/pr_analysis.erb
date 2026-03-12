@@ -5,23 +5,51 @@
   <h2>Summary</h2>
   <div class="summary">
     <div class="stat">
-      <div class="stat-value"><%= @results[:total_failures] %></div>
-      <div class="stat-label">Total Failures</div>
+      <div class="stat-value"><%= @results[:total_failed_jobs] %></div>
+      <div class="stat-label">Failed Jobs</div>
     </div>
     <div class="stat">
-      <div class="stat-value"><%= @results[:unique_tests] %></div>
-      <div class="stat-label">Unique Tests</div>
+      <div class="stat-value"><%= @results[:test_details][:unique_tests] %></div>
+      <div class="stat-label">Failed Tests</div>
     </div>
     <div class="stat">
-      <div class="stat-value"><%= @results[:flaky_tests] %></div>
+      <div class="stat-value"><%= @results[:test_details][:flaky_tests] %></div>
       <div class="stat-label">Flaky Tests</div>
     </div>
   </div>
 </div>
 
-<% if @results[:aggregated].any? %>
+<% if @results[:categorized_failures].any? %>
+  <% @results[:categorized_failures].each do |category, failures| %>
+  <div class="card">
+    <h2><%= Bells::FailureCategorizer.category_label(category) %> (<%= failures.size %>)</h2>
+    <table>
+      <thead>
+        <tr>
+          <th>Job</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        <% failures.each do |failure| %>
+        <tr>
+          <td><%= failure.job_name %></td>
+          <td><a href="<%= failure.url %>" target="_blank">View Logs</a></td>
+        </tr>
+        <% end %>
+      </tbody>
+    </table>
+  </div>
+  <% end %>
+<% else %>
 <div class="card">
-  <h2>Failed Tests</h2>
+  <p>No CI failures found for this PR.</p>
+</div>
+<% end %>
+
+<% if @results[:test_details][:aggregated].any? %>
+<div class="card">
+  <h2>Test Failure Details</h2>
   <input type="text" class="search" placeholder="Filter tests...">
   <table>
     <thead>
@@ -32,7 +60,7 @@
       </tr>
     </thead>
     <tbody>
-      <% @results[:aggregated].each do |failure| %>
+      <% @results[:test_details][:aggregated].each do |failure| %>
       <tr class="expandable">
         <td>
           <strong><%= failure.test_class %></strong><br>
@@ -69,10 +97,5 @@
       <% end %>
     </tbody>
   </table>
-</div>
-<% else %>
-<div class="card">
-  <p>No test failures found in JUnit artifacts.</p>
-  <p><small>Note: Only failures from jobs that produce JUnit XML are shown. Jobs that fail before running tests (e.g., build failures, timeouts) won't appear here.</small></p>
 </div>
 <% end %>

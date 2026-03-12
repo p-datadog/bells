@@ -58,12 +58,21 @@ RSpec.describe "PR Analysis Routes" do
   end
 
   describe "GET /pr/:number" do
+    let(:mock_job_failure) do
+      Bells::FailureCategorizer::JobFailure.new(
+        job_name: "steep/typecheck",
+        job_id: 123,
+        category: :type_check,
+        url: "https://github.com/example",
+        details: nil
+      )
+    end
+
     before do
       allow(Bells).to receive(:analyze_pr).with(123).and_return(
-        total_failures: 5,
-        unique_tests: 3,
-        flaky_tests: 1,
-        aggregated: []
+        categorized_failures: { type_check: [mock_job_failure] },
+        test_details: { total_failures: 0, unique_tests: 0, flaky_tests: 0, aggregated: [] },
+        total_failed_jobs: 1
       )
     end
 
@@ -72,18 +81,28 @@ RSpec.describe "PR Analysis Routes" do
 
       expect(last_response).to be_ok
       expect(last_response.body).to include("PR #123")
-      expect(last_response.body).to include("5")
-      expect(last_response.body).to include("Total Failures")
+      expect(last_response.body).to include("Failed Jobs")
+      expect(last_response.body).to include("Type Check")
+      expect(last_response.body).to include("steep/typecheck")
     end
   end
 
   describe "GET /api/pr/:number" do
+    let(:mock_job_failure) do
+      Bells::FailureCategorizer::JobFailure.new(
+        job_name: "rubocop/lint",
+        job_id: 456,
+        category: :lint,
+        url: "https://github.com/example",
+        details: nil
+      )
+    end
+
     before do
       allow(Bells).to receive(:analyze_pr).with(456).and_return(
-        total_failures: 2,
-        unique_tests: 2,
-        flaky_tests: 0,
-        aggregated: []
+        categorized_failures: { lint: [mock_job_failure] },
+        test_details: { total_failures: 2, unique_tests: 2, flaky_tests: 0, aggregated: [] },
+        total_failed_jobs: 1
       )
     end
 
@@ -95,7 +114,8 @@ RSpec.describe "PR Analysis Routes" do
 
       json = JSON.parse(last_response.body)
       expect(json["pr_number"]).to eq(456)
-      expect(json["total_failures"]).to eq(2)
+      expect(json["total_failed_jobs"]).to eq(1)
+      expect(json["categorized_failures"]).to have_key("lint")
     end
   end
 end

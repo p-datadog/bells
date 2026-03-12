@@ -34,23 +34,29 @@ get "/api/pr/:number" do
 
   {
     pr_number: pr_number,
-    total_failures: results[:total_failures],
-    unique_tests: results[:unique_tests],
-    flaky_tests: results[:flaky_tests],
-    failures: results[:aggregated].map do |f|
-      {
-        test_class: f.test_class,
-        test_name: f.test_name,
-        failure_count: f.failure_count,
-        instances: f.instances.map do |i|
-          {
-            failure_message: i.failure_message,
-            stack_trace: i.stack_trace,
-            execution_time: i.execution_time,
-            build_context: i.build_context&.to_h
-          }
-        end
-      }
-    end
+    total_failed_jobs: results[:total_failed_jobs],
+    categorized_failures: results[:categorized_failures].transform_values do |failures|
+      failures.map { |f| { job_name: f.job_name, job_id: f.job_id, url: f.url } }
+    end,
+    test_details: {
+      total_failures: results[:test_details][:total_failures],
+      unique_tests: results[:test_details][:unique_tests],
+      flaky_tests: results[:test_details][:flaky_tests],
+      failures: results[:test_details][:aggregated].map do |f|
+        {
+          test_class: f.test_class,
+          test_name: f.test_name,
+          failure_count: f.failure_count,
+          instances: f.instances.map do |i|
+            {
+              failure_message: i.failure_message,
+              stack_trace: i.stack_trace,
+              execution_time: i.execution_time,
+              build_context: i.build_context&.to_h
+            }
+          end
+        }
+      end
+    }
   }.to_json
 end
