@@ -26,16 +26,11 @@ module Bells
     end
 
     def ci_status(sha)
-      all_check_runs = []
+      check_runs = with_auto_paginate { @client.check_runs_for_ref(REPO, sha)[:check_runs] }
+      return :unknown if check_runs.empty?
 
-      @client.paginate("repos/#{REPO}/commits/#{sha}/check-runs") do |response|
-        all_check_runs.concat(response[:check_runs])
-      end
-
-      return :unknown if all_check_runs.empty?
-
-      conclusions = all_check_runs.map(&:conclusion)
-      statuses = all_check_runs.map(&:status)
+      conclusions = check_runs.map(&:conclusion)
+      statuses = check_runs.map(&:status)
 
       has_failures = conclusions.include?("failure")
       all_complete = statuses.all? { |s| s == "completed" }
@@ -50,13 +45,9 @@ module Bells
     def workflow_runs_for_pr(pr_number)
       pr = @client.pull_request(REPO, pr_number)
       head_sha = pr.head.sha
-      all_runs = []
 
-      @client.paginate("repos/#{REPO}/actions/runs", branch: pr.head.ref) do |response|
-        all_runs.concat(response[:workflow_runs])
-      end
-
-      all_runs.select { |run| run.head_sha == head_sha }
+      runs = @client.repository_workflow_runs(REPO, branch: pr.head.ref)[:workflow_runs]
+      runs.select { |run| run.head_sha == head_sha }
     end
 
     def failed_runs(pr_number)
@@ -65,13 +56,8 @@ module Bells
 
     def failed_jobs_for_pr(pr_number)
       pr = @client.pull_request(REPO, pr_number)
-      all_check_runs = []
-
-      @client.paginate("repos/#{REPO}/commits/#{pr.head.sha}/check-runs") do |response|
-        all_check_runs.concat(response[:check_runs])
-      end
-
-      all_check_runs.select { |run| run.conclusion == "failure" }
+      check_runs = with_auto_paginate { @client.check_runs_for_ref(REPO, pr.head.sha)[:check_runs] }
+      check_runs.select { |run| run.conclusion == "failure" }
     end
 
     def job_logs(job_id)
@@ -102,14 +88,17 @@ module Bells
 
     private
 
+    def with_auto_paginate
+      original = @client.auto_paginate
+      @client.auto_paginate = true
+      yield
+    ensure
+      @client.auto_paginate = original
+    end
+
     def download_artifacts_for_run(run, cache_dir)
-      all_artifacts = []
-
-      @client.paginate("repos/#{REPO}/actions/runs/#{run.id}/artifacts") do |response|
-        all_artifacts.concat(response[:artifacts])
-      end
-
-      junit_artifacts = all_artifacts.select { |a| a.name.match?(/junit|test-results/i) }
+      artifacts = @client.workflow_run_artifacts(REPO, run.id)[:artifacts]
+      junit_artifacts = artifacts.select { |a| a.name.match?(/junit|test-results/i) }
 
       junit_artifacts.map do |artifact|
         download_artifact(artifact, run, cache_dir)
