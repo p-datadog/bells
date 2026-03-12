@@ -12,6 +12,8 @@ configure :test do
 end
 
 get "/" do
+  client = Bells::GitHubClient.new
+  @pull_requests = client.pull_requests
   erb :index
 end
 

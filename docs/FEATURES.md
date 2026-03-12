@@ -9,7 +9,7 @@ This document tracks major features in bells.
 Analyze test failures in dd-trace-rb pull requests.
 
 **Routes:**
-- `GET /` - Home page with PR input form
+- `GET /` - Home page with PR input form and list of open PRs
 - `GET /pr/:number` - Analyze PR and display aggregated failures
 - `GET /api/pr/:number` - JSON API for PR analysis
 

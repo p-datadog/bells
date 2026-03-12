@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require "spec_helper"
+require "ostruct"
 require_relative "../../app"
 
 RSpec.describe "PR Analysis Routes" do
@@ -11,12 +12,30 @@ RSpec.describe "PR Analysis Routes" do
   end
 
   describe "GET /" do
-    it "renders the index page" do
+    let(:mock_client) { instance_double(Bells::GitHubClient) }
+    let(:mock_pr) do
+      OpenStruct.new(
+        number: 999,
+        title: "Test PR",
+        html_url: "https://github.com/DataDog/dd-trace-rb/pull/999",
+        user: OpenStruct.new(login: "testuser"),
+        updated_at: Time.now
+      )
+    end
+
+    before do
+      allow(Bells::GitHubClient).to receive(:new).and_return(mock_client)
+      allow(mock_client).to receive(:pull_requests).and_return([mock_pr])
+    end
+
+    it "renders the index page with PR list" do
       get "/"
 
       expect(last_response).to be_ok
       expect(last_response.body).to include("bells")
       expect(last_response.body).to include("Analyze Pull Request")
+      expect(last_response.body).to include("Open Pull Requests")
+      expect(last_response.body).to include("Test PR")
     end
   end
 

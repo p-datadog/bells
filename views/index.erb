@@ -8,3 +8,29 @@
     <button type="submit">Analyze</button>
   </form>
 </div>
+
+<div class="card">
+  <h2>Open Pull Requests</h2>
+  <table>
+    <thead>
+      <tr>
+        <th>#</th>
+        <th>Title</th>
+        <th>Author</th>
+        <th>Updated</th>
+        <th></th>
+      </tr>
+    </thead>
+    <tbody>
+      <% @pull_requests.each do |pr| %>
+      <tr>
+        <td><%= pr.number %></td>
+        <td><a href="<%= pr.html_url %>"><%= pr.title %></a></td>
+        <td><%= pr.user.login %></td>
+        <td><%= pr.updated_at.strftime("%Y-%m-%d") %></td>
+        <td><a href="/pr/<%= pr.number %>">Analyze</a></td>
+      </tr>
+      <% end %>
+    </tbody>
+  </table>
+</div>

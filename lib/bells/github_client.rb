@@ -10,7 +10,11 @@ module Bells
 
     def initialize(token: ENV["GITHUB_TOKEN"])
       @client = Octokit::Client.new(access_token: token)
-      @client.auto_paginate = true
+      @client.auto_paginate = false
+    end
+
+    def pull_requests(state: "open", per_page: 30)
+      @client.pull_requests(REPO, state: state, per_page: per_page)
     end
 
     def workflow_runs_for_pr(pr_number)
