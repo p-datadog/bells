@@ -44,7 +44,7 @@ Analyze CI test failures in datadog/dd-trace-rb pull requests by extracting JUni
 ### Architecture
 
 ```
-CLI Tool → GitHub API → Artifact Storage → Parser → Web Server → Browser
+Web App → GitHub API → Cache → Parser → Aggregator → UI
 ```
 
 ### Components
@@ -58,8 +58,8 @@ CLI Tool → GitHub API → Artifact Storage → Parser → Web Server → Brows
 - **Auth**: Use existing `gh` authentication or GitHub token
 
 #### 2. Artifact Processing
-- **Storage**: Local cache directory (`.bells/cache/<pr-number>/`)
-- **Parser**: Ruby XML parser (Nokogiri) or Python (lxml)
+- **Storage**: Server-side cache directory (`cache/<pr-number>/`)
+- **Parser**: Nokogiri
 - **Data Model**:
 ```
 TestFailure:
@@ -87,7 +87,7 @@ TestFailure:
 - **Grouping strategy**: Normalize test names to handle parametrized tests
 
 #### 4. Web Interface
-- **Framework**: Lightweight (Sinatra for Ruby, Flask for Python)
+- **Framework**: Sinatra
 - **Features**:
   - Single page per PR analysis
   - Sortable table of failures
@@ -96,45 +96,27 @@ TestFailure:
   - Export to JSON/CSV
 - **Styling**: Minimal CSS, responsive
 
-### Implementation Language
+### Implementation
 
 **Ruby**
 - Nokogiri for XML parsing
 - Sinatra for web interface
-- Octokit for GitHub API (or shell out to `gh`)
-- Consistent with dd-trace-rb development environment
-
-### CLI Interface
-
-```bash
-# Analyze PR
-bells analyze-pr <pr-number>
-
-# Start web viewer
-bells view <pr-number>
-
-# Clear cache
-bells clear-cache <pr-number>
-```
+- Octokit for GitHub API
 
 ### Workflow
 
-1. User runs `bells analyze-pr 1234`
-2. Tool fetches workflow runs for PR #1234
+1. User visits `/pr/1234`
+2. App fetches workflow runs for PR #1234 (or uses cache)
 3. Identifies failed runs, downloads JUnit artifacts
-4. Parses XML files, builds failure database
-5. Stores results in `.bells/cache/1234/failures.json`
-6. User runs `bells view 1234`
-7. Web server starts on localhost:5000
-8. Browser displays aggregated failures
+4. Parses XML files, aggregates failures
+5. Renders results page
 
 ### Open Questions
 
-1. **Scope**: Should we analyze all workflow runs or only the latest commit?
+1. **Scope**: Analyze all workflow runs or only latest commit?
 2. **Caching**: How long to cache artifacts? Invalidation strategy?
-3. **Incremental updates**: Support for updating analysis as new builds complete?
-4. **Multi-PR comparison**: Future feature to compare failure patterns across PRs?
-5. **GitHub App vs CLI**: Package as GitHub App for in-PR comments vs standalone tool?
+3. **Incremental updates**: Update analysis as new builds complete?
+4. **Multi-PR comparison**: Compare failure patterns across PRs?
 
 ### Next Steps
 
