@@ -72,6 +72,7 @@
 </div>
 <% else %>
 <div class="card">
-  <p>No test failures found for this PR.</p>
+  <p>No test failures found in JUnit artifacts.</p>
+  <p><small>Note: Only failures from jobs that produce JUnit XML are shown. Jobs that fail before running tests (e.g., build failures, timeouts) won't appear here.</small></p>
 </div>
 <% end %>

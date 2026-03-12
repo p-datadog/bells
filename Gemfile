@@ -7,6 +7,7 @@ gem "puma"
 gem "nokogiri"
 gem "octokit"
 gem "faraday-retry"
+gem "faraday-follow_redirects"
 gem "rubyzip"
 
 group :development, :test do

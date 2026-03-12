@@ -1,7 +1,6 @@
 # frozen_string_literal: true
 
 require "octokit"
-require "zip"
 require "fileutils"
 
 module Bells
@@ -9,6 +8,7 @@ module Bells
     REPO = "DataDog/dd-trace-rb"
 
     def initialize(token: ENV["GITHUB_TOKEN"])
+      @token = token
       @client = Octokit::Client.new(access_token: token)
       @client.auto_paginate = false
     end
@@ -51,32 +51,29 @@ module Bells
 
     def download_artifact(artifact, run, cache_dir)
       artifact_path = File.join(cache_dir, "#{run.id}_#{artifact.name}")
-      return artifact_path if File.exist?(artifact_path)
+      return artifact_path if Dir.exist?(artifact_path)
 
-      zip_path = "#{artifact_path}.zip"
-      url = @client.workflow_run_artifact_download_url(REPO, artifact.id)
+      FileUtils.mkdir_p(artifact_path)
 
-      response = Faraday.get(url) do |req|
-        req.headers["Authorization"] = "Bearer #{@client.access_token}"
+      result = system(
+        "gh", "run", "download", run.id.to_s,
+        "-R", REPO,
+        "-n", artifact.name,
+        "-D", artifact_path,
+        out: File::NULL,
+        err: File::NULL
+      )
+
+      unless result
+        warn "Failed to download artifact #{artifact.name} from run #{run.id}"
+        FileUtils.rm_rf(artifact_path)
+        return nil
       end
-
-      File.binwrite(zip_path, response.body)
-      extract_zip(zip_path, artifact_path)
-      FileUtils.rm_f(zip_path)
 
       artifact_path
     rescue => e
       warn "Failed to download artifact #{artifact.id}: #{e.message}"
       nil
-    end
-
-    def extract_zip(zip_path, dest_dir)
-      FileUtils.mkdir_p(dest_dir)
-      Zip::File.open(zip_path) do |zip|
-        zip.each do |entry|
-          entry.extract(File.join(dest_dir, entry.name)) { true }
-        end
-      end
     end
   end
 end
