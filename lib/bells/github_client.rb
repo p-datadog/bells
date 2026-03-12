@@ -52,8 +52,13 @@ module Bells
 
     def failed_jobs_for_pr(pr_number)
       pr = @client.pull_request(REPO, pr_number)
-      check_runs = @client.check_runs_for_ref(REPO, pr.head.sha)[:check_runs]
-      check_runs.select { |run| run.conclusion == "failure" }
+      all_check_runs = []
+
+      @client.paginate("repos/#{REPO}/commits/#{pr.head.sha}/check-runs") do |response|
+        all_check_runs.concat(response[:check_runs])
+      end
+
+      all_check_runs.select { |run| run.conclusion == "failure" }
     end
 
     def job_logs(job_id)
