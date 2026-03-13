@@ -25,6 +25,14 @@ Infrastructure detection takes **precedence** over name-based categorization. Th
 - API rate limit exceeded
 - Unable to download actions
 
+### Git/Checkout Authentication Failures
+- `fatal: could not read Username` - GitHub authentication token issues
+- `fatal: could not read Password` - GitHub credential failures
+- `terminal prompts disabled` - Non-interactive authentication failures
+- Git exit code 128 - General git authentication/permission errors
+- `Authentication failed` - Git authentication failures
+- `fatal: repository not found` - Often indicates authentication/permission issues
+
 ### Runner/VM Failures
 - Self-hosted runner lost communication
 - Runner unexpectedly terminated
@@ -41,7 +49,9 @@ Infrastructure detection takes **precedence** over name-based categorization. Th
 - Out of memory
 - Disk quota exceeded
 
-## Example
+## Examples
+
+### Example 1: GitHub Actions API Failure
 
 For a job that fails with:
 ```
@@ -53,6 +63,21 @@ The system will:
 1. Categorize it as **Infrastructure** (not "Tests" based on job name)
 2. Extract the relevant error context
 3. Display it prominently in the UI with error details
+
+### Example 2: Git Checkout Authentication Failure
+
+For a job that fails during checkout with:
+```
+2026-03-12T03:07:12Z ##[group]Run actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+2026-03-12T03:07:12Z ##[error]fatal: could not read Username for 'https://github.com': terminal prompts disabled
+2026-03-12T03:07:44Z ##[error]The process '/usr/bin/git' failed with exit code 128
+```
+
+The system will:
+1. Detect the `fatal: could not read Username` pattern
+2. Categorize it as **Infrastructure** (GitHub authentication issue)
+3. Extract context showing the checkout failure
+4. Allow automatic restart since it's not a code issue
 
 ## Benefits
 

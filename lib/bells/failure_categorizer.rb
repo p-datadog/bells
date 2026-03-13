@@ -26,6 +26,15 @@ module Bells
       /##\[error\].*API rate limit/i,
       /##\[error\].*Unable to download actions/i,
 
+      # Git/checkout authentication failures
+      /fatal: could not read Username/i,
+      /fatal: could not read Password/i,
+      /terminal prompts disabled/i,
+      /##\[error\].*failed with exit code 128/i, # Git authentication error
+      /Authentication failed/i,
+      /fatal: Authentication failed for/i,
+      /fatal: repository.*not found/i, # Often indicates auth issues
+
       # Runner/VM failures
       /The self-hosted runner.*lost communication/i,
       /runner.*unexpectedly terminated/i,

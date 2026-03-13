@@ -74,3 +74,34 @@ get "/api/pr/:number" do
     }
   }.to_json
 end
+
+post "/pr/:number/restart_category" do
+  pr_number = params[:number].to_i
+  category = params[:category]&.to_sym
+
+  # Validate
+  halt 400, "Invalid category" unless [:infrastructure].include?(category)
+
+  # Get current data
+  client = Bells::GitHubClient.new
+  results = Bells.analyze_pr(pr_number)
+
+  # Collect jobs to restart
+  jobs_to_restart = results[:categorized_failures][category] || []
+  jobs_to_restart += (results[:meta_failures] || [])
+
+  # Restart each job
+  success_count = 0
+  failure_count = 0
+
+  jobs_to_restart.each do |failure|
+    if client.restart_job(failure.job_id)
+      success_count += 1
+    else
+      failure_count += 1
+    end
+  end
+
+  # Redirect with feedback
+  redirect "/pr/#{pr_number}?restarted=#{success_count}&failed=#{failure_count}"
+end

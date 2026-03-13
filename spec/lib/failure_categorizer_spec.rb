@@ -217,6 +217,225 @@ RSpec.describe Bells::FailureCategorizer do
       expect(described_class.category_label(:lint)).to eq("Lint")
       expect(described_class.category_label(:tests)).to eq("Tests")
       expect(described_class.category_label(:uncategorized)).to eq("Uncategorized")
+      expect(described_class.category_label(:infrastructure)).to eq("Infrastructure")
+    end
+  end
+
+  describe "infrastructure failure detection" do
+    let(:job) { OpenStruct.new(name: "Ruby 3.4 / build & test", id: 123, html_url: "https://github.com/example") }
+    let(:mock_github_client) { double("GitHubClient") }
+
+    context "when logs contain git authentication failures" do
+      it "detects 'fatal: could not read Username' as infrastructure failure" do
+        logs = <<~LOGS
+          2026-03-12T03:07:12.0067589Z ##[group]Run actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+          2026-03-12T03:07:12.7226789Z ##[error]fatal: could not read Username for 'https://github.com': terminal prompts disabled
+          2026-03-12T03:07:44.1033938Z ##[error]The process '/usr/bin/git' failed with exit code 128
+        LOGS
+
+        allow(mock_github_client).to receive(:job_logs).with(123).and_return(logs)
+
+        result = categorizer.categorize_job(job, github_client: mock_github_client)
+
+        expect(result.category).to eq(:infrastructure)
+        expect(result.details).to include("fatal: could not read Username")
+      end
+
+      it "detects 'terminal prompts disabled' as infrastructure failure" do
+        logs = "fatal: could not read Username for 'https://github.com': terminal prompts disabled"
+        allow(mock_github_client).to receive(:job_logs).with(123).and_return(logs)
+
+        result = categorizer.categorize_job(job, github_client: mock_github_client)
+
+        expect(result.category).to eq(:infrastructure)
+        expect(result.details).to include("terminal prompts disabled")
+      end
+
+      it "detects 'Authentication failed' as infrastructure failure" do
+        logs = "fatal: Authentication failed for 'https://github.com/DataDog/dd-trace-rb.git/'"
+        allow(mock_github_client).to receive(:job_logs).with(123).and_return(logs)
+
+        result = categorizer.categorize_job(job, github_client: mock_github_client)
+
+        expect(result.category).to eq(:infrastructure)
+      end
+
+      it "detects git exit code 128 as infrastructure failure" do
+        logs = "##[error]The process '/usr/bin/git' failed with exit code 128"
+        allow(mock_github_client).to receive(:job_logs).with(123).and_return(logs)
+
+        result = categorizer.categorize_job(job, github_client: mock_github_client)
+
+        expect(result.category).to eq(:infrastructure)
+      end
+    end
+
+    context "when logs contain GitHub Actions API failures" do
+      it "detects 'Failed to download action' as infrastructure failure" do
+        logs = "##[error]Failed to download action 'https://api.github.com/repos/actions/checkout'"
+        allow(mock_github_client).to receive(:job_logs).with(123).and_return(logs)
+
+        result = categorizer.categorize_job(job, github_client: mock_github_client)
+
+        expect(result.category).to eq(:infrastructure)
+      end
+
+      it "detects 401 Unauthorized as infrastructure failure" do
+        logs = "Response status code does not indicate success: 401 (Unauthorized)"
+        allow(mock_github_client).to receive(:job_logs).with(123).and_return(logs)
+
+        result = categorizer.categorize_job(job, github_client: mock_github_client)
+
+        expect(result.category).to eq(:infrastructure)
+      end
+
+      it "detects 429 rate limit as infrastructure failure" do
+        logs = "Response status code does not indicate success: 429 (Too Many Requests)"
+        allow(mock_github_client).to receive(:job_logs).with(123).and_return(logs)
+
+        result = categorizer.categorize_job(job, github_client: mock_github_client)
+
+        expect(result.category).to eq(:infrastructure)
+      end
+
+      it "detects 5xx server errors as infrastructure failure" do
+        logs = "Response status code does not indicate success: 503 (Service Unavailable)"
+        allow(mock_github_client).to receive(:job_logs).with(123).and_return(logs)
+
+        result = categorizer.categorize_job(job, github_client: mock_github_client)
+
+        expect(result.category).to eq(:infrastructure)
+      end
+    end
+
+    context "when logs contain runner failures" do
+      it "detects runner communication loss as infrastructure failure" do
+        logs = "The self-hosted runner: test-runner lost communication with the server"
+        allow(mock_github_client).to receive(:job_logs).with(123).and_return(logs)
+
+        result = categorizer.categorize_job(job, github_client: mock_github_client)
+
+        expect(result.category).to eq(:infrastructure)
+      end
+
+      it "detects unexpected runner termination as infrastructure failure" do
+        logs = "runner process unexpectedly terminated"
+        allow(mock_github_client).to receive(:job_logs).with(123).and_return(logs)
+
+        result = categorizer.categorize_job(job, github_client: mock_github_client)
+
+        expect(result.category).to eq(:infrastructure)
+      end
+    end
+
+    context "when logs contain network issues" do
+      it "detects connection timeouts as infrastructure failure" do
+        logs = "Connection timed out after 30 seconds"
+        allow(mock_github_client).to receive(:job_logs).with(123).and_return(logs)
+
+        result = categorizer.categorize_job(job, github_client: mock_github_client)
+
+        expect(result.category).to eq(:infrastructure)
+      end
+
+      it "detects network unreachable as infrastructure failure" do
+        logs = "Network is unreachable"
+        allow(mock_github_client).to receive(:job_logs).with(123).and_return(logs)
+
+        result = categorizer.categorize_job(job, github_client: mock_github_client)
+
+        expect(result.category).to eq(:infrastructure)
+      end
+    end
+
+    context "when logs contain resource issues" do
+      it "detects out of disk space as infrastructure failure" do
+        logs = "Error: No space left on device"
+        allow(mock_github_client).to receive(:job_logs).with(123).and_return(logs)
+
+        result = categorizer.categorize_job(job, github_client: mock_github_client)
+
+        expect(result.category).to eq(:infrastructure)
+      end
+
+      it "detects out of memory as infrastructure failure" do
+        logs = "Out of memory: Kill process 1234"
+        allow(mock_github_client).to receive(:job_logs).with(123).and_return(logs)
+
+        result = categorizer.categorize_job(job, github_client: mock_github_client)
+
+        expect(result.category).to eq(:infrastructure)
+      end
+    end
+
+    context "when logs contain code failures" do
+      it "does not categorize test failures as infrastructure" do
+        logs = <<~LOGS
+          Running tests...
+          1) Test::MyTest failed
+          Expected: true
+          Got: false
+        LOGS
+        allow(mock_github_client).to receive(:job_logs).with(123).and_return(logs)
+
+        result = categorizer.categorize_job(job, github_client: mock_github_client)
+
+        expect(result.category).to eq(:tests)
+        expect(result.details).to be_nil
+      end
+
+      it "does not categorize build failures as infrastructure" do
+        logs = <<~LOGS
+          Building project...
+          error: undefined method `foo' for nil:NilClass
+        LOGS
+        allow(mock_github_client).to receive(:job_logs).with(123).and_return(logs)
+
+        result = categorizer.categorize_job(job, github_client: mock_github_client)
+
+        expect(result.category).to eq(:tests)
+        expect(result.details).to be_nil
+      end
+    end
+
+    context "when github_client is not provided" do
+      it "categorizes by job name only" do
+        result = categorizer.categorize_job(job)
+
+        expect(result.category).to eq(:tests)
+        expect(result.details).to be_nil
+      end
+    end
+
+    context "when log fetching fails" do
+      it "falls back to job name categorization" do
+        allow(mock_github_client).to receive(:job_logs).with(123).and_return(nil)
+
+        result = categorizer.categorize_job(job, github_client: mock_github_client)
+
+        expect(result.category).to eq(:tests)
+        expect(result.details).to be_nil
+      end
+    end
+
+    context "error snippet extraction" do
+      it "extracts context around the error" do
+        logs = <<~LOGS
+          Line 1: Setting up job
+          Line 2: Initializing containers
+          Line 3: ##[error]fatal: could not read Username for 'https://github.com': terminal prompts disabled
+          Line 4: Cleaning up
+          Line 5: Complete job
+        LOGS
+        allow(mock_github_client).to receive(:job_logs).with(123).and_return(logs)
+
+        result = categorizer.categorize_job(job, github_client: mock_github_client)
+
+        expect(result.category).to eq(:infrastructure)
+        expect(result.details).to include("Line 1")
+        expect(result.details).to include("Line 3")
+        expect(result.details).to include("Line 5")
+      end
     end
   end
 end
