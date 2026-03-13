@@ -109,3 +109,26 @@
   </table>
 </div>
 <% end %>
+
+<% if @results[:meta_failures] %>
+<div class="card" style="opacity: 0.7;">
+  <h2>Also Failed</h2>
+  <p style="margin-bottom: 10px;"><small>The meta-check job also failed, but this is expected when other jobs fail:</small></p>
+  <table>
+    <thead>
+      <tr>
+        <th>Job</th>
+        <th></th>
+      </tr>
+    </thead>
+    <tbody>
+      <% @results[:meta_failures].each do |failure| %>
+      <tr>
+        <td><%= failure.job_name %></td>
+        <td><a href="<%= failure.url %>" target="_blank">View Logs</a></td>
+      </tr>
+      <% end %>
+    </tbody>
+  </table>
+</div>
+<% end %>

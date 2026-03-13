@@ -124,6 +124,7 @@ RSpec.describe "PR Analysis Routes" do
       allow(mock_client).to receive(:ci_status).with("abc123").and_return(:failed)
       allow(Bells).to receive(:analyze_pr).with(123).and_return(
         categorized_failures: { type_check: [mock_job_failure] },
+        meta_failures: nil,
         test_details: { total_failures: 0, unique_tests: 0, flaky_tests: 0, aggregated: [] },
         total_failed_jobs: 1,
         auto_restarted: false
@@ -145,6 +146,7 @@ RSpec.describe "PR Analysis Routes" do
     it "shows auto-restart notice when job was restarted" do
       allow(Bells).to receive(:analyze_pr).with(456).and_return(
         categorized_failures: {},
+        meta_failures: nil,
         test_details: { total_failures: 0, unique_tests: 0, flaky_tests: 0, aggregated: [] },
         total_failed_jobs: 1,
         auto_restarted: true
@@ -174,6 +176,7 @@ RSpec.describe "PR Analysis Routes" do
     before do
       allow(Bells).to receive(:analyze_pr).with(456).and_return(
         categorized_failures: { lint: [mock_job_failure] },
+        meta_failures: nil,
         test_details: { total_failures: 2, unique_tests: 2, flaky_tests: 0, aggregated: [] },
         total_failed_jobs: 1,
         auto_restarted: false

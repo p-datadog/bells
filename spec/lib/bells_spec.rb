@@ -33,11 +33,22 @@ RSpec.describe Bells do
           id: 12345
         )
       end
+      let(:meta_job_failure) do
+        Bells::FailureCategorizer::JobFailure.new(
+          job_name: Bells::META_CHECK_JOB_NAME,
+          job_id: 12345,
+          category: :meta,
+          url: "https://github.com/example",
+          details: nil
+        )
+      end
 
       before do
         allow(mock_client).to receive(:failed_jobs_for_pr).with(123).and_return([meta_job])
-        allow(mock_categorizer).to receive(:categorize_jobs).and_return([])
-        allow(mock_categorizer).to receive(:group_by_category).and_return({})
+        allow(mock_categorizer).to receive(:categorize_jobs).and_return([meta_job_failure])
+        allow(mock_categorizer).to receive(:group_by_category).and_return({
+          meta: [meta_job_failure]
+        })
         allow(mock_client).to receive(:restart_job).with(12345).and_return(true)
       end
 
@@ -51,6 +62,14 @@ RSpec.describe Bells do
 
         # Give the background thread time to execute
         sleep 0.1
+      end
+
+      it "keeps meta-check in categorized failures when it's the only failure" do
+        result = described_class.analyze_pr(123)
+
+        expect(result[:categorized_failures]).to have_key(:meta)
+        expect(result[:categorized_failures][:meta].size).to eq(1)
+        expect(result[:meta_failures]).to be_nil
       end
     end
 
@@ -67,11 +86,32 @@ RSpec.describe Bells do
           id: 67890
         )
       end
+      let(:meta_job_failure) do
+        Bells::FailureCategorizer::JobFailure.new(
+          job_name: Bells::META_CHECK_JOB_NAME,
+          job_id: 12345,
+          category: :meta,
+          url: "https://github.com/example",
+          details: nil
+        )
+      end
+      let(:lint_job_failure) do
+        Bells::FailureCategorizer::JobFailure.new(
+          job_name: "rubocop/lint",
+          job_id: 67890,
+          category: :lint,
+          url: "https://github.com/example",
+          details: nil
+        )
+      end
 
       before do
         allow(mock_client).to receive(:failed_jobs_for_pr).with(123).and_return([meta_job, other_job])
-        allow(mock_categorizer).to receive(:categorize_jobs).and_return([])
-        allow(mock_categorizer).to receive(:group_by_category).and_return({})
+        allow(mock_categorizer).to receive(:categorize_jobs).and_return([meta_job_failure, lint_job_failure])
+        allow(mock_categorizer).to receive(:group_by_category).and_return({
+          meta: [meta_job_failure],
+          lint: [lint_job_failure]
+        })
       end
 
       it "does not restart the job" do
@@ -81,6 +121,15 @@ RSpec.describe Bells do
 
         expect(result[:auto_restarted]).to eq(false)
         expect(result[:total_failed_jobs]).to eq(2)
+      end
+
+      it "moves meta-check to meta_failures when there are other failures" do
+        result = described_class.analyze_pr(123)
+
+        expect(result[:categorized_failures]).not_to have_key(:meta)
+        expect(result[:categorized_failures]).to have_key(:lint)
+        expect(result[:categorized_failures][:lint].size).to eq(1)
+        expect(result[:meta_failures]).to eq([meta_job_failure])
       end
     end
 

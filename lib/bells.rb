@@ -34,6 +34,12 @@ module Bells
         auto_restarted = true
       end
 
+      # Extract meta-check failures to show separately when there are other failures
+      meta_failures = nil
+      if categorized.size > 1 && categorized[:meta]
+        meta_failures = categorized.delete(:meta)
+      end
+
       # Get detailed test failures from JUnit artifacts
       artifact_dirs = client.download_junit_artifacts(pr_number, cache_dir: cache_dir)
       test_failures = artifact_dirs.flat_map do |dir|
@@ -43,6 +49,7 @@ module Bells
 
       {
         categorized_failures: categorized,
+        meta_failures: meta_failures,
         test_details: test_summary,
         total_failed_jobs: failed_jobs.size,
         auto_restarted: auto_restarted
