@@ -112,7 +112,7 @@ module Bells
     end
 
     def download_artifacts_for_run(run, cache_dir)
-      artifacts = @client.workflow_run_artifacts(REPO, run.id)[:artifacts]
+      artifacts = with_auto_paginate { @client.workflow_run_artifacts(REPO, run.id)[:artifacts] }
       junit_artifacts = artifacts.select { |a| a.name.match?(/junit|test-results/i) }
 
       junit_artifacts.map do |artifact|
