@@ -29,12 +29,16 @@ module Bells
     )
 
     def parse_file(path, build_context: nil)
-      doc = Nokogiri::XML(File.read(path))
+      doc = Nokogiri::XML(File.read(path)) do |config|
+        config.nonet.noent.noblanks
+      end
       parse_document(doc, build_context: build_context)
     end
 
     def parse_string(xml, build_context: nil)
-      doc = Nokogiri::XML(xml)
+      doc = Nokogiri::XML(xml) do |config|
+        config.nonet.noent.noblanks
+      end
       parse_document(doc, build_context: build_context)
     end
 
@@ -59,12 +63,16 @@ module Bells
     private
 
     def parse_file_failures_only(path, build_context: nil)
-      doc = Nokogiri::XML(File.read(path))
+      doc = Nokogiri::XML(File.read(path)) do |config|
+        config.nonet.noent.noblanks
+      end
       parse_document_failures_only(doc, build_context: build_context)
     end
 
     def parse_file_for_tests(path, test_ids, build_context: nil)
-      doc = Nokogiri::XML(File.read(path))
+      doc = Nokogiri::XML(File.read(path)) do |config|
+        config.nonet.noent.noblanks
+      end
       parse_document_for_tests(doc, test_ids, build_context: build_context)
     end
 

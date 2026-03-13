@@ -27,7 +27,7 @@ module Bells
       # Get all failed jobs and categorize them
       failed_jobs = client.failed_jobs_for_pr(pr_number)
       in_progress_jobs = client.in_progress_jobs_for_pr(pr_number)
-      job_failures = categorizer.categorize_jobs(failed_jobs)
+      job_failures = categorizer.categorize_jobs(failed_jobs, github_client: client)
       categorized = categorizer.group_by_category(job_failures)
 
       # Auto-restart meta-check job if it's the only failure

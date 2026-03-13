@@ -186,9 +186,23 @@ module Bells
 
     def extract_zip(zip_path, dest_dir)
       FileUtils.mkdir_p(dest_dir)
+      dest_dir_real = File.realpath(dest_dir)
+
       Zip::File.open(zip_path) do |zip|
         zip.each do |entry|
-          entry.extract(File.join(dest_dir, entry.name)) { true }
+          # Prevent Zip Slip: validate that extraction path stays within dest_dir
+          extract_path = File.join(dest_dir, entry.name)
+          extract_path_real = File.expand_path(extract_path)
+
+          unless extract_path_real.start_with?(dest_dir_real + File::SEPARATOR) || extract_path_real == dest_dir_real
+            error_msg = "Zip Slip attempt detected: #{entry.name}"
+            warn error_msg
+            @download_errors << error_msg if @download_errors
+            next
+          end
+
+          FileUtils.mkdir_p(File.dirname(extract_path))
+          entry.extract(extract_path) { true }
         end
       end
     end
