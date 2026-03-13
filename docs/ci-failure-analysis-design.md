@@ -124,15 +124,19 @@ end
 module Bells
   class JunitParser
     # Structs for parsed data
-    TestFailure = Struct.new(
+    TestResult = Struct.new(
       :test_class,      # From testcase[@classname]
       :test_name,       # From testcase[@name]
-      :failure_message, # From failure[@message] or error[@message]
-      :stack_trace,     # From failure/error text content
+      :status,          # :passed or :failed
+      :failure_message, # From failure[@message] or error[@message], nil if passed
+      :stack_trace,     # From failure/error text content, nil if passed
       :execution_time,  # From testcase[@time]
       :build_context,   # BuildContext struct
       keyword_init: true
     )
+
+    # Alias for backwards compatibility
+    TestFailure = TestResult
 
     BuildContext = Struct.new(
       :workflow_name, :job_name, :run_id, :attempt, :file_path,
@@ -147,8 +151,9 @@ module Bells
     private
 
     def parse_document(doc, build_context:)
-      # XPath: //testcase[failure or error]
-      # Extract failure/error node, build TestFailure struct
+      # XPath: //testcase (ALL tests, not just failures)
+      # Determine status based on presence of failure/error node
+      # Extract failure/error details if present, build TestResult struct
   end
 end
 ```
@@ -162,7 +167,8 @@ module Bells
       :test_class,
       :test_name,
       :failure_count,
-      :instances,  # Array of TestFailure
+      :pass_count,
+      :instances,  # Array of TestResult (both passes and failures)
       keyword_init: true
     ) do
       def test_id
@@ -170,19 +176,22 @@ module Bells
       end
 
       def flaky?
-        failure_count > 1  # Same test failed in multiple jobs
+        # True flakiness: same test both passed and failed
+        pass_count > 0 && failure_count > 0
       end
     end
 
-    def aggregate(failures)
+    def aggregate(test_results)
       # Group by [test_class, test_name]
+      # Only include tests with at least one failure
+      # Count failures and passes separately
       # Sort by failure_count descending, then by test_id
 
-    def summary(failures)
+    def summary(test_results)
       # Returns hash with:
-      # - total_failures: count of all failure instances
-      # - unique_tests: count of unique test identities
-      # - flaky_tests: count where failure_count > 1
+      # - total_failures: count of failed test instances
+      # - unique_tests: count of unique failing test identities
+      # - flaky_tests: count where pass_count > 0 AND failure_count > 0
       # - aggregated: array of AggregatedFailure
   end
 end
@@ -244,15 +253,20 @@ module Bells
       job_failures = categorizer.categorize_jobs(failed_jobs)
       categorized = categorizer.group_by_category(job_failures)
 
-      # Get detailed test failures from JUnit
+      # Auto-restart meta-check if it's the only failure
+      # Filter meta-check from results when other failures exist
+
+      # Get all test results from JUnit (passes and failures)
       artifact_dirs = client.download_junit_artifacts(pr_number, cache_dir: cache_dir)
-      test_failures = artifact_dirs.flat_map { |dir| parser.parse_directory(dir) if dir }.compact
-      test_summary = aggregator.summary(test_failures)
+      test_results = artifact_dirs.flat_map { |dir| parser.parse_directory(dir) if dir }.compact
+      test_summary = aggregator.summary(test_results)
 
       {
         categorized_failures: categorized,
+        meta_failures: meta_failures,
         test_details: test_summary,
-        total_failed_jobs: failed_jobs.size
+        total_failed_jobs: failed_jobs.size,
+        auto_restarted: auto_restarted
       }
     end
   end
@@ -301,13 +315,16 @@ end
 - PR table: #, Title, Author, CI Status, Updated, Analyze link
 
 ### PR Analysis (`views/pr_analysis.erb`)
-- Summary stats: Failed Jobs, Failed Tests, Flaky Tests
-- Category sections (Type Check, Lint, etc.) with job tables
+- PR title and CI status badge
+- Single-line summary: "X failed jobs, Y failed tests (Z flaky)"
+- Auto-restart notice (when meta-check was restarted)
+- Category sections (Meta, Type Check, Lint, etc.) with job tables
 - Test failure details table with expandable rows showing:
   - Test class and name
-  - Failure count
-  - Flaky badge if count > 1
-  - Expandable: failure message, stack trace, build context
+  - Failure count / pass count (if any passes)
+  - Flaky badge if test both passed and failed
+  - Expandable: status (PASSED/FAILED), failure message, stack trace, build context
+- "Also Failed" section for meta-check when other failures exist
 
 ## CI Status Logic
 

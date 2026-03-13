@@ -1,6 +1,7 @@
 <?xml version="1.0"?>
-<testsuite>
+<testsuite tests="2" failures="1">
   <testcase classname="SampleTest" name="test_one" time="0.1">
     <failure message="fail">stack</failure>
   </testcase>
+  <testcase classname="SampleTest" name="test_two" time="0.05"/>
 </testsuite>

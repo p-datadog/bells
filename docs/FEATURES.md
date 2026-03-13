@@ -33,8 +33,8 @@ Analyze CI failures in dd-trace-rb pull requests, grouped by category.
 **Components:**
 - `Bells::GitHubClient` - Fetches workflow runs, CI status, failed jobs, and JUnit artifacts. Includes restart_job method.
 - `Bells::FailureCategorizer` - Categorizes failed jobs by type
-- `Bells::JunitParser` - Parses JUnit XML files to extract test failures
-- `Bells::FailureAggregator` - Groups test failures, identifies flaky tests
+- `Bells::JunitParser` - Parses JUnit XML files to extract all test results (passes and failures)
+- `Bells::FailureAggregator` - Groups test results and detects true flaky tests (tests that both pass and fail in the same PR)
 
 **Auto-Restart:**
 When "all-jobs-are-green" is the only failing job, it's automatically restarted in the background. This meta-check often fails due to race conditions when it runs before other jobs complete. A notice is displayed on the PR analysis page when auto-restart occurs.

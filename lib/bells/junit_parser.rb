@@ -4,15 +4,19 @@ require "nokogiri"
 
 module Bells
   class JunitParser
-    TestFailure = Struct.new(
+    TestResult = Struct.new(
       :test_class,
       :test_name,
+      :status,          # :passed or :failed
       :failure_message,
       :stack_trace,
       :execution_time,
       :build_context,
       keyword_init: true
     )
+
+    # Alias for backwards compatibility
+    TestFailure = TestResult
 
     BuildContext = Struct.new(
       :workflow_name,
@@ -42,22 +46,24 @@ module Bells
     private
 
     def parse_document(doc, build_context:)
-      failures = []
+      results = []
 
-      doc.xpath("//testcase[failure or error]").each do |testcase|
+      doc.xpath("//testcase").each do |testcase|
         failure_node = testcase.at_xpath("failure") || testcase.at_xpath("error")
+        status = failure_node ? :failed : :passed
 
-        failures << TestFailure.new(
+        results << TestResult.new(
           test_class: testcase["classname"],
           test_name: testcase["name"],
-          failure_message: failure_node["message"],
-          stack_trace: failure_node.text&.strip,
+          status: status,
+          failure_message: failure_node&.[]("message"),
+          stack_trace: failure_node&.text&.strip,
           execution_time: testcase["time"]&.to_f,
           build_context: build_context
         )
       end
 
-      failures
+      results
     end
 
     def context_from_path(path)

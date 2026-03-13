@@ -6,6 +6,7 @@ module Bells
       :test_class,
       :test_name,
       :failure_count,
+      :pass_count,
       :instances,
       keyword_init: true
     ) do
@@ -14,27 +15,36 @@ module Bells
       end
 
       def flaky?
-        failure_count > 1
+        # True flakiness: same test both passed and failed
+        pass_count > 0 && failure_count > 0
       end
     end
 
-    def aggregate(failures)
-      grouped = failures.group_by { |f| [f.test_class, f.test_name] }
+    def aggregate(test_results)
+      # Group by test identity
+      grouped = test_results.group_by { |r| [r.test_class, r.test_name] }
 
-      grouped.map do |(test_class, test_name), instances|
+      # Only include tests that have at least one failure
+      grouped.select { |_, instances| instances.any? { |i| i.status == :failed } }.map do |(test_class, test_name), instances|
+        failures = instances.select { |i| i.status == :failed }
+        passes = instances.select { |i| i.status == :passed }
+
         AggregatedFailure.new(
           test_class: test_class,
           test_name: test_name,
-          failure_count: instances.size,
+          failure_count: failures.size,
+          pass_count: passes.size,
           instances: instances
         )
       end.sort_by { |f| [-f.failure_count, f.test_id] }
     end
 
-    def summary(failures)
-      aggregated = aggregate(failures)
+    def summary(test_results)
+      aggregated = aggregate(test_results)
+      total_failures = test_results.count { |r| r.status == :failed }
+
       {
-        total_failures: failures.size,
+        total_failures: total_failures,
         unique_tests: aggregated.size,
         flaky_tests: aggregated.count(&:flaky?),
         aggregated: aggregated
