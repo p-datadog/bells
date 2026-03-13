@@ -41,7 +41,10 @@ module Bells
       end
 
       # Get detailed test failures from JUnit artifacts
-      artifact_dirs = client.download_junit_artifacts(pr_number, cache_dir: cache_dir)
+      download_result = client.download_junit_artifacts(pr_number, cache_dir: cache_dir)
+      artifact_dirs = download_result[:artifact_dirs]
+      download_errors = download_result[:errors]
+
       test_failures = artifact_dirs.flat_map do |dir|
         parser.parse_directory(dir) if dir && File.directory?(dir)
       end.compact
@@ -52,7 +55,8 @@ module Bells
         meta_failures: meta_failures,
         test_details: test_summary,
         total_failed_jobs: failed_jobs.size,
-        auto_restarted: auto_restarted
+        auto_restarted: auto_restarted,
+        download_errors: download_errors
       }
     end
   end

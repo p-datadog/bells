@@ -16,7 +16,10 @@ RSpec.describe Bells do
       allow(Bells::FailureAggregator).to receive(:new).and_return(mock_aggregator)
       allow(Bells::FailureCategorizer).to receive(:new).and_return(mock_categorizer)
 
-      allow(mock_client).to receive(:download_junit_artifacts).and_return([])
+      allow(mock_client).to receive(:download_junit_artifacts).and_return({
+        artifact_dirs: [],
+        errors: []
+      })
       allow(mock_parser).to receive(:parse_directory).and_return([])
       allow(mock_aggregator).to receive(:summary).and_return(
         total_failures: 0,

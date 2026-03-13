@@ -111,10 +111,13 @@ RSpec.describe Bells::GitHubClient do
     end
 
     it "downloads and extracts junit artifacts", :vcr do
-      dirs = client.download_junit_artifacts(5431, cache_dir: cache_dir)
+      result = client.download_junit_artifacts(5431, cache_dir: cache_dir)
 
-      expect(dirs).to be_an(Array)
-      dirs.compact.each do |dir|
+      expect(result).to be_a(Hash)
+      expect(result[:artifact_dirs]).to be_an(Array)
+      expect(result[:errors]).to be_an(Array)
+
+      result[:artifact_dirs].compact.each do |dir|
         expect(Dir.exist?(dir)).to be true
         xml_files = Dir.glob(File.join(dir, "**/*.xml"))
         expect(xml_files).not_to be_empty

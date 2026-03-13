@@ -11,6 +11,17 @@
 </div>
 <% end %>
 
+<% if @results[:download_errors]&.any? %>
+<div class="card" style="background: #f8d7da; border-left: 4px solid #dc3545;">
+  <h3 style="margin-top: 0; color: #721c24;">Artifact Download Errors</h3>
+  <ul style="margin: 0;">
+    <% @results[:download_errors].each do |error| %>
+      <li><%= error %></li>
+    <% end %>
+  </ul>
+</div>
+<% end %>
+
 <p><strong><%= @results[:total_failed_jobs] %></strong> failed jobs, <strong><%= @results[:test_details][:unique_tests] %></strong> failed tests<% if @results[:test_details][:flaky_tests] > 0 %> (<strong><%= @results[:test_details][:flaky_tests] %></strong> flaky)<% end %></p>
 
 <% if @results[:categorized_failures].any? %>

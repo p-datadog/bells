@@ -127,7 +127,8 @@ RSpec.describe "PR Analysis Routes" do
         meta_failures: nil,
         test_details: { total_failures: 0, unique_tests: 0, flaky_tests: 0, aggregated: [] },
         total_failed_jobs: 1,
-        auto_restarted: false
+        auto_restarted: false,
+        download_errors: []
       )
     end
 
@@ -149,7 +150,8 @@ RSpec.describe "PR Analysis Routes" do
         meta_failures: nil,
         test_details: { total_failures: 0, unique_tests: 0, flaky_tests: 0, aggregated: [] },
         total_failed_jobs: 1,
-        auto_restarted: true
+        auto_restarted: true,
+        download_errors: []
       )
       allow(mock_client).to receive(:pull_request).with(456).and_return(mock_pr)
       allow(mock_client).to receive(:ci_status).with("abc123").and_return(:failed)
@@ -159,6 +161,26 @@ RSpec.describe "PR Analysis Routes" do
       expect(last_response).to be_ok
       expect(last_response.body).to include("Automatically restarted")
       expect(last_response.body).to include(Bells::META_CHECK_JOB_NAME)
+    end
+
+    it "displays artifact download errors" do
+      allow(Bells).to receive(:analyze_pr).with(789).and_return(
+        categorized_failures: {},
+        meta_failures: nil,
+        test_details: { total_failures: 0, unique_tests: 0, flaky_tests: 0, aggregated: [] },
+        total_failed_jobs: 0,
+        auto_restarted: false,
+        download_errors: ["Failed to download artifact junit-test: HTTP 404", "Failed to download artifact results: empty response"]
+      )
+      allow(mock_client).to receive(:pull_request).with(789).and_return(mock_pr)
+      allow(mock_client).to receive(:ci_status).with("abc123").and_return(:green)
+
+      get "/pr/789"
+
+      expect(last_response).to be_ok
+      expect(last_response.body).to include("Artifact Download Errors")
+      expect(last_response.body).to include("HTTP 404")
+      expect(last_response.body).to include("empty response")
     end
   end
 
@@ -179,7 +201,8 @@ RSpec.describe "PR Analysis Routes" do
         meta_failures: nil,
         test_details: { total_failures: 2, unique_tests: 2, flaky_tests: 0, aggregated: [] },
         total_failed_jobs: 1,
-        auto_restarted: false
+        auto_restarted: false,
+        download_errors: []
       )
     end
 

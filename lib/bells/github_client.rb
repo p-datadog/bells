@@ -95,10 +95,13 @@ module Bells
     def download_junit_artifacts(pr_number, cache_dir:)
       pr_cache = File.join(cache_dir, pr_number.to_s)
       FileUtils.mkdir_p(pr_cache)
+      @download_errors = []
 
-      failed_runs(pr_number).flat_map do |run|
+      result = failed_runs(pr_number).flat_map do |run|
         download_artifacts_for_run(run, pr_cache)
       end
+
+      { artifact_dirs: result, errors: @download_errors }
     end
 
     private
@@ -137,12 +140,16 @@ module Bells
       end
 
       unless response.success?
-        warn "Failed to download artifact #{artifact.name}: HTTP #{response.status}"
+        error_msg = "Failed to download artifact #{artifact.name}: HTTP #{response.status}"
+        warn error_msg
+        @download_errors << error_msg if @download_errors
         return nil
       end
 
       if response.body.nil? || response.body.empty?
-        warn "Failed to download artifact #{artifact.name}: empty response"
+        error_msg = "Failed to download artifact #{artifact.name}: empty response"
+        warn error_msg
+        @download_errors << error_msg if @download_errors
         return nil
       end
 
@@ -150,7 +157,9 @@ module Bells
       File.binwrite(zip_path, response.body)
 
       unless File.exist?(zip_path)
-        warn "Failed to write artifact #{artifact.name}: zip file not created"
+        error_msg = "Failed to write artifact #{artifact.name}: zip file not created"
+        warn error_msg
+        @download_errors << error_msg if @download_errors
         return nil
       end
 
@@ -159,7 +168,9 @@ module Bells
 
       artifact_path
     rescue => e
-      warn "Failed to download artifact #{artifact.id}: #{e.message}"
+      error_msg = "Failed to download artifact #{artifact.name}: #{e.message}"
+      warn error_msg
+      @download_errors << error_msg if @download_errors
       FileUtils.rm_f(zip_path) if zip_path
       nil
     end
