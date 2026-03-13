@@ -12,10 +12,10 @@ set :views, File.join(__dir__, "views")
 # Enable HTML auto-escaping for XSS protection
 set :erb, escape_html: true
 
-# Initialize PR cache (Solution #1: In-memory caching)
+# In-memory cache for PR data
 PR_CACHE = Bells::PrCache.new
 
-# Solution #3: Background job to pre-fetch PR data
+# Background refresher to keep cache warm
 BACKGROUND_REFRESHER = Bells::BackgroundRefresher.new(PR_CACHE, interval: 120)
 
 configure :development, :production do
@@ -35,29 +35,23 @@ at_exit do
 end
 
 get "/" do
-  # Solution #1: Cache PR list and CI statuses for 2 minutes
+  # Use cached PR data (kept warm by background refresher)
   pr_data = PR_CACHE.fetch("pr_list") do
     client = Bells::GitHubClient.new
     prs = client.pull_requests
-
-    # Fetch CI status for all PRs
     ci_statuses = prs.to_h { |pr| [pr.number, client.ci_status(pr.head.sha)] }
-
     { prs: prs, ci_statuses: ci_statuses }
   end
 
   all_prs = pr_data[:prs]
-
   default_author = ENV["BELLS_DEFAULT_AUTHOR"]
   show_all = params[:show_all] == "true"
 
   @authors = all_prs.map { |pr| pr.user.login }.uniq.sort
   @default_author = default_author
   @author_filter = params[:author] || (default_author unless show_all)
-
   @pull_requests = @author_filter ? all_prs.select { |pr| pr.user.login == @author_filter } : all_prs
   @ci_status = pr_data[:ci_statuses]
-  @use_lazy_load = params[:lazy] == "true"
 
   erb :index
 end
@@ -70,41 +64,6 @@ get "/pr/:number" do
   @ci_status = client.ci_status(pr.head.sha)
   @results = Bells.analyze_pr(@pr_number)
   erb :pr_analysis
-end
-
-# Solution #2: API endpoint for lazy-loading CI statuses
-get "/api/ci-status" do
-  content_type :json
-
-  pr_numbers = params[:pr_numbers]&.split(",")&.map(&:to_i)
-
-  if pr_numbers.nil? || pr_numbers.empty?
-    return halt 400, { error: "Missing pr_numbers parameter" }.to_json
-  end
-
-  if pr_numbers.size > 50
-    return halt 400, { error: "Too many PR numbers (max 50)" }.to_json
-  end
-
-  client = Bells::GitHubClient.new
-
-  # Fetch CI status for requested PRs
-  statuses = pr_numbers.each_with_object({}) do |pr_number, hash|
-    # Use cache to avoid re-fetching
-    hash[pr_number] = PR_CACHE.fetch("ci_status:#{pr_number}", ttl: 60) do
-      begin
-        pr = client.pull_request(pr_number)
-        client.ci_status(pr.head.sha).to_s
-      rescue Octokit::NotFound
-        "unknown"
-      rescue => e
-        warn "Failed to fetch CI status for PR #{pr_number}: #{e.message}"
-        "unknown"
-      end
-    end
-  end
-
-  statuses.to_json
 end
 
 get "/api/pr/:number" do
