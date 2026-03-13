@@ -141,13 +141,26 @@ module Bells
         return nil
       end
 
+      if response.body.nil? || response.body.empty?
+        warn "Failed to download artifact #{artifact.name}: empty response"
+        return nil
+      end
+
+      FileUtils.mkdir_p(cache_dir)
       File.binwrite(zip_path, response.body)
+
+      unless File.exist?(zip_path)
+        warn "Failed to write artifact #{artifact.name}: zip file not created"
+        return nil
+      end
+
       extract_zip(zip_path, artifact_path)
       FileUtils.rm_f(zip_path)
 
       artifact_path
     rescue => e
       warn "Failed to download artifact #{artifact.id}: #{e.message}"
+      FileUtils.rm_f(zip_path) if zip_path
       nil
     end
 
