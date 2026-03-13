@@ -4,6 +4,7 @@ source "https://rubygems.org"
 
 gem "sinatra"
 gem "puma"
+gem "erubi"
 gem "nokogiri"
 gem "octokit"
 gem "faraday-retry"

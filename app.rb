@@ -7,6 +7,9 @@ require_relative "lib/bells"
 set :public_folder, File.join(__dir__, "public")
 set :views, File.join(__dir__, "views")
 
+# Enable HTML auto-escaping for XSS protection
+set :erb, escape_html: true
+
 configure :test do
   set :permitted_hosts, []
 end
