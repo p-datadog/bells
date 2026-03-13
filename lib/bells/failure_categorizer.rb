@@ -8,7 +8,7 @@ module Bells
       [:type_check, /steep|typecheck|type.?check|rbs/i],
       [:lint, %r{lint|rubocop|standard/|actionlint|yaml-lint|semgrep|zizmor}i],
       [:security, /codeql|security|semgrep/i],
-      [:tests, %r{test|spec|build & test|parametric|end-to-end|junit}i],
+      [:tests, %r{test|spec|build & test|parametric|end-to-end|junit|batch}i],
       [:build, /\bbuild\b|compile|bundle/i]
     ].freeze
 

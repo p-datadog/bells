@@ -18,9 +18,18 @@ RSpec.describe Bells::FailureCategorizer do
     end
 
     it "categorizes type check jobs" do
-      job = mock_job("steep/typecheck")
-      result = categorizer.categorize_job(job)
-      expect(result.category).to eq(:type_check)
+      type_check_names = [
+        "steep/typecheck",
+        "steep",
+        "type-check",
+        "rbs-validation"
+      ]
+
+      type_check_names.each do |name|
+        job = mock_job(name)
+        result = categorizer.categorize_job(job)
+        expect(result.category).to eq(:type_check), "Expected #{name} to be :type_check"
+      end
     end
 
     it "categorizes lint jobs" do
@@ -32,9 +41,16 @@ RSpec.describe Bells::FailureCategorizer do
     end
 
     it "categorizes security jobs" do
-      job = mock_job("CodeQL")
-      result = categorizer.categorize_job(job)
-      expect(result.category).to eq(:security)
+      security_names = [
+        "CodeQL",
+        "security-scan"
+      ]
+
+      security_names.each do |name|
+        job = mock_job(name)
+        result = categorizer.categorize_job(job)
+        expect(result.category).to eq(:security), "Expected #{name} to be :security"
+      end
     end
 
     it "categorizes test jobs" do
@@ -42,7 +58,12 @@ RSpec.describe Bells::FailureCategorizer do
         "Ruby 3.3 / build & test (standard) [0]",
         "JRuby 9.4 / build & test (misc) [0]",
         "test / parametric / parametric (3)",
-        "test / End-to-end #10 / rails42 10"
+        "test / End-to-end #10 / rails42 10",
+        "Ruby 2.6 / batch",
+        "Ruby 3.2 / batch",
+        "JRuby 9.4 / batch",
+        "unit-test-batch",
+        "rspec-batch-runner"
       ]
 
       test_names.each do |name|
@@ -53,15 +74,33 @@ RSpec.describe Bells::FailureCategorizer do
     end
 
     it "categorizes build jobs" do
-      job = mock_job("build")
-      result = categorizer.categorize_job(job)
-      expect(result.category).to eq(:build)
+      build_names = [
+        "build",
+        "Build Docker Image",
+        "compile-native-extensions",
+        "bundle install"
+      ]
+
+      build_names.each do |name|
+        job = mock_job(name)
+        result = categorizer.categorize_job(job)
+        expect(result.category).to eq(:build), "Expected #{name} to be :build"
+      end
     end
 
     it "marks unknown jobs as uncategorized" do
-      job = mock_job("some-random-job")
-      result = categorizer.categorize_job(job)
-      expect(result.category).to eq(:uncategorized)
+      uncategorized_names = [
+        "some-random-job",
+        "deploy-staging",
+        "notify-slack",
+        "generate-docs"
+      ]
+
+      uncategorized_names.each do |name|
+        job = mock_job(name)
+        result = categorizer.categorize_job(job)
+        expect(result.category).to eq(:uncategorized), "Expected #{name} to be :uncategorized"
+      end
     end
 
     it "includes job details in result" do
@@ -71,6 +110,62 @@ RSpec.describe Bells::FailureCategorizer do
       expect(result.job_name).to eq("steep/typecheck")
       expect(result.job_id).to eq(123)
       expect(result.url).to eq("https://github.com/example")
+    end
+
+    context "pattern precedence" do
+      it "categorizes meta check with exact match before other patterns" do
+        # Meta should match exactly, not be categorized as anything else
+        job = mock_job("all-jobs-are-green")
+        result = categorizer.categorize_job(job)
+        expect(result.category).to eq(:meta)
+      end
+
+      it "categorizes semgrep as lint (earlier in list) not security" do
+        # semgrep appears in both lint and security patterns
+        # lint pattern comes before security, so it should win
+        job = mock_job("semgrep")
+        result = categorizer.categorize_job(job)
+        expect(result.category).to eq(:lint)
+      end
+
+      it "categorizes 'build & test' as tests not build" do
+        # Contains both "build" and "test", but "build & test" pattern
+        # in tests category should match before generic build pattern
+        job = mock_job("Ruby 3.3 / build & test (standard) [0]")
+        result = categorizer.categorize_job(job)
+        expect(result.category).to eq(:tests)
+      end
+    end
+
+    context "edge cases" do
+      it "handles job names with special characters" do
+        special_names = [
+          "test/integration/redis-5.0",
+          "Ruby 3.3 / spec:foo:bar",
+          "JRuby 9.4 / test (standard) [10]"
+        ]
+
+        special_names.each do |name|
+          job = mock_job(name)
+          result = categorizer.categorize_job(job)
+          expect(result.category).to eq(:tests), "Expected #{name} to be :tests"
+        end
+      end
+
+      it "handles case-insensitive matching" do
+        case_variants = [
+          "TEST",
+          "Test",
+          "BATCH",
+          "Batch"
+        ]
+
+        case_variants.each do |name|
+          job = mock_job(name)
+          result = categorizer.categorize_job(job)
+          expect(result.category).to eq(:tests), "Expected #{name} to be :tests (case-insensitive)"
+        end
+      end
     end
   end
 
