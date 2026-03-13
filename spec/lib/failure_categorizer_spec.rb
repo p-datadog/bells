@@ -99,7 +99,7 @@ RSpec.describe Bells::FailureCategorizer do
 
       grouped = categorizer.group_by_category(failures)
 
-      expect(grouped.keys).to eq([:type_check, :lint, :tests])
+      expect(grouped.keys).to eq([:tests, :type_check, :lint])
       expect(grouped[:tests].size).to eq(2)
       expect(grouped[:lint].size).to eq(1)
       expect(grouped[:type_check].size).to eq(1)
