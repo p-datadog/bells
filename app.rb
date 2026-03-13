@@ -14,8 +14,14 @@ end
 get "/" do
   client = Bells::GitHubClient.new
   all_prs = client.pull_requests
+
+  default_author = ENV["BELLS_DEFAULT_AUTHOR"]
+  show_all = params[:show_all] == "true"
+
   @authors = all_prs.map { |pr| pr.user.login }.uniq.sort
-  @author_filter = params[:author]
+  @default_author = default_author
+  @author_filter = params[:author] || (default_author unless show_all)
+
   @pull_requests = @author_filter ? all_prs.select { |pr| pr.user.login == @author_filter } : all_prs
   @ci_status = @pull_requests.to_h { |pr| [pr.number, client.ci_status(pr.head.sha)] }
   erb :index

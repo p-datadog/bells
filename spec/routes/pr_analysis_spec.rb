@@ -55,6 +55,54 @@ RSpec.describe "PR Analysis Routes" do
       expect(last_response).to be_ok
       expect(last_response.body).not_to include("Test PR")
     end
+
+    context "with BELLS_DEFAULT_AUTHOR set" do
+      let(:default_pr) do
+        OpenStruct.new(
+          number: 100,
+          title: "Default User PR",
+          html_url: "https://github.com/DataDog/dd-trace-rb/pull/100",
+          user: OpenStruct.new(login: "defaultuser"),
+          head: OpenStruct.new(sha: "def456"),
+          updated_at: Time.now
+        )
+      end
+
+      before do
+        ENV["BELLS_DEFAULT_AUTHOR"] = "defaultuser"
+        allow(mock_client).to receive(:pull_requests).and_return([mock_pr, default_pr])
+        allow(mock_client).to receive(:ci_status).with("def456").and_return(:green)
+      end
+
+      after do
+        ENV.delete("BELLS_DEFAULT_AUTHOR")
+      end
+
+      it "shows only default author's PRs by default" do
+        get "/"
+
+        expect(last_response).to be_ok
+        expect(last_response.body).to include("Default User PR")
+        expect(last_response.body).not_to include("Test PR")
+        expect(last_response.body).to include("(default)")
+      end
+
+      it "shows all PRs when show_all=true" do
+        get "/?show_all=true"
+
+        expect(last_response).to be_ok
+        expect(last_response.body).to include("Default User PR")
+        expect(last_response.body).to include("Test PR")
+      end
+
+      it "allows filtering by different author" do
+        get "/?author=testuser"
+
+        expect(last_response).to be_ok
+        expect(last_response.body).to include("Test PR")
+        expect(last_response.body).not_to include("Default User PR")
+      end
+    end
   end
 
   describe "GET /pr/:number" do

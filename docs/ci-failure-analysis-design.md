@@ -264,13 +264,16 @@ end
 ```ruby
 get "/" do
   # Fetch PRs, extract authors for filter links
+  # Check BELLS_DEFAULT_AUTHOR env var
+  # Apply default filter unless show_all=true or author param set
   # Get CI status for each PR
-  # @pull_requests, @authors, @author_filter, @ci_status
+  # @pull_requests, @authors, @author_filter, @default_author, @ci_status
   erb :index
 end
 
 get "/pr/:number" do
   @pr_number = params[:number].to_i
+  # Fetch PR details for title and CI status
   @results = Bells.analyze_pr(@pr_number)
   erb :pr_analysis
 end
@@ -293,7 +296,8 @@ end
 
 ### Index (`views/index.erb`)
 - PR number input form
-- Author filter pills
+- Author filter pills (with "All PRs" link when default author is set)
+- Default author marked with "(default)" label
 - PR table: #, Title, Author, CI Status, Updated, Analyze link
 
 ### PR Analysis (`views/pr_analysis.erb`)
@@ -366,6 +370,7 @@ coverage/
 
 ### Environment
 - `GITHUB_TOKEN`: Optional, falls back to `gh auth token`
+- `BELLS_DEFAULT_AUTHOR`: Optional, filters PRs by author on homepage by default
 
 ## Usage
 

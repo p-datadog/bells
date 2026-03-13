@@ -11,6 +11,7 @@ Analyze CI failures in dd-trace-rb pull requests, grouped by category.
 **Routes:**
 - `GET /` - Home page with PR input form, list of open PRs, and CI status
 - `GET /?author=<login>` - Filter PRs by author
+- `GET /?show_all=true` - Show all PRs (overrides default author)
 - `GET /pr/:number` - Analyze PR and display categorized failures
 - `GET /api/pr/:number` - JSON API for PR analysis
 
@@ -34,6 +35,9 @@ Analyze CI failures in dd-trace-rb pull requests, grouped by category.
 - `Bells::JunitParser` - Parses JUnit XML files to extract test failures
 - `Bells::FailureAggregator` - Groups test failures, identifies flaky tests
 
+**Configuration:**
+- `BELLS_DEFAULT_AUTHOR` - Optional environment variable to filter PRs by a specific author by default. When set, the home page shows only that author's PRs, with an "All PRs" link to view all.
+
 **Usage:**
 ```bash
 # Production
@@ -41,6 +45,9 @@ bundle exec puma
 
 # Development (auto-reload on file changes)
 bundle exec rerun -- puma
+
+# With default author filter
+BELLS_DEFAULT_AUTHOR=ivoanjo bundle exec puma
 
 # Visit http://localhost:9292
 ```
