@@ -98,9 +98,9 @@ module Bells
     def group_by_category(job_failures)
       grouped = job_failures.group_by(&:category)
 
-      # Ensure consistent ordering (infrastructure early to highlight CI issues)
+      # Order: tests first (most important), then type/lint, uncategorized, infrastructure, meta last
       result = {}
-      [:meta, :infrastructure, :type_check, :lint, :security, :tests, :build, :uncategorized].each do |cat|
+      [:tests, :type_check, :lint, :security, :build, :uncategorized, :infrastructure, :meta].each do |cat|
         result[cat] = grouped[cat] if grouped[cat]&.any?
       end
       result
