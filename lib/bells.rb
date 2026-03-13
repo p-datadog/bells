@@ -54,10 +54,24 @@ module Bells
       artifact_dirs = download_result[:artifact_dirs]
       download_errors = download_result[:errors]
 
+      # Two-pass parsing for performance:
+      # Pass 1: Parse only failures to identify which tests failed
       test_failures = artifact_dirs.flat_map do |dir|
-        parser.parse_directory(dir) if dir && File.directory?(dir)
+        parser.parse_directory_failures_only(dir) if dir && File.directory?(dir)
       end.compact
-      test_summary = aggregator.summary(test_failures)
+
+      # Pass 2: Parse all results (passes + failures) for only the tests that failed
+      failed_test_ids = test_failures.map { |f| "#{f.test_class}##{f.test_name}" }.uniq
+
+      test_results = if failed_test_ids.any?
+        artifact_dirs.flat_map do |dir|
+          parser.parse_directory_for_tests(dir, failed_test_ids) if dir && File.directory?(dir)
+        end.compact
+      else
+        []
+      end
+
+      test_summary = aggregator.summary(test_results)
 
       result = {
         categorized_failures: categorized,

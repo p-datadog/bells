@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require "nokogiri"
+require "set"
 
 module Bells
   class JunitParser
@@ -43,27 +44,77 @@ module Bells
       end
     end
 
+    def parse_directory_failures_only(dir_path, build_context: nil)
+      Dir.glob(File.join(dir_path, "**/*.xml")).flat_map do |file|
+        parse_file_failures_only(file, build_context: build_context || context_from_path(file))
+      end
+    end
+
+    def parse_directory_for_tests(dir_path, test_ids, build_context: nil)
+      Dir.glob(File.join(dir_path, "**/*.xml")).flat_map do |file|
+        parse_file_for_tests(file, test_ids, build_context: build_context || context_from_path(file))
+      end
+    end
+
     private
+
+    def parse_file_failures_only(path, build_context: nil)
+      doc = Nokogiri::XML(File.read(path))
+      parse_document_failures_only(doc, build_context: build_context)
+    end
+
+    def parse_file_for_tests(path, test_ids, build_context: nil)
+      doc = Nokogiri::XML(File.read(path))
+      parse_document_for_tests(doc, test_ids, build_context: build_context)
+    end
 
     def parse_document(doc, build_context:)
       results = []
 
       doc.xpath("//testcase").each do |testcase|
-        failure_node = testcase.at_xpath("failure") || testcase.at_xpath("error")
-        status = failure_node ? :failed : :passed
-
-        results << TestResult.new(
-          test_class: testcase["classname"],
-          test_name: testcase["name"],
-          status: status,
-          failure_message: failure_node&.[]("message"),
-          stack_trace: failure_node&.text&.strip,
-          execution_time: testcase["time"]&.to_f,
-          build_context: build_context
-        )
+        results << build_test_result(testcase, build_context)
       end
 
       results
+    end
+
+    def parse_document_failures_only(doc, build_context:)
+      results = []
+
+      doc.xpath("//testcase[failure or error]").each do |testcase|
+        results << build_test_result(testcase, build_context)
+      end
+
+      results
+    end
+
+    def parse_document_for_tests(doc, test_ids, build_context:)
+      results = []
+      test_id_set = test_ids.to_set
+
+      doc.xpath("//testcase").each do |testcase|
+        test_id = "#{testcase['classname']}##{testcase['name']}"
+        next unless test_id_set.include?(test_id)
+
+        results << build_test_result(testcase, build_context)
+      end
+
+      results
+    end
+
+    def build_test_result(testcase, build_context)
+      failure_node = testcase.at_xpath("failure") || testcase.at_xpath("error")
+      status = failure_node ? :failed : :passed
+
+      TestResult.new(
+        test_class: testcase["classname"],
+        test_name: testcase["name"],
+        status: status,
+        failure_message: failure_node&.[]("message"),
+        stack_trace: failure_node&.text&.strip,
+        execution_time: testcase["time"]&.to_f,
+        build_context: build_context
+      )
     end
 
     def context_from_path(path)
