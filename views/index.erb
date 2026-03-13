@@ -36,14 +36,62 @@
     </thead>
     <tbody>
       <% @pull_requests.each do |pr| %>
-      <tr>
+      <tr data-pr-number="<%= pr.number %>">
         <td><a href="<%= pr.html_url %>"><%= pr.number %></a></td>
         <td><a href="/pr/<%= pr.number %>"><%= pr.title %></a></td>
         <td><%= pr.user.login %></td>
-        <td><span class="ci-status ci-<%= @ci_status[pr.number] %>"><%= {green: "Green", pending_clean: "Pending", pending_failing: "Pending (failing)", failed: "Failed", unknown: "Unknown"}[@ci_status[pr.number]] %></span></td>
+        <td>
+          <% if @use_lazy_load %>
+            <span class="ci-status ci-loading" data-ci-status>Loading...</span>
+          <% else %>
+            <span class="ci-status ci-<%= @ci_status[pr.number] %>"><%= {green: "Green", pending_clean: "Pending", pending_failing: "Pending (failing)", failed: "Failed", unknown: "Unknown"}[@ci_status[pr.number]] %></span>
+          <% end %>
+        </td>
         <td><%= pr.updated_at.strftime("%Y-%m-%d") %></td>
       </tr>
       <% end %>
     </tbody>
   </table>
 </div>
+
+<% if @use_lazy_load %>
+<script>
+  // Solution #2: Lazy-load CI statuses via AJAX
+  (function() {
+    const prNumbers = Array.from(document.querySelectorAll('[data-pr-number]'))
+      .map(row => row.dataset.prNumber);
+
+    if (prNumbers.length === 0) return;
+
+    // Fetch CI statuses in batches of 10
+    const batchSize = 10;
+    for (let i = 0; i < prNumbers.length; i += batchSize) {
+      const batch = prNumbers.slice(i, i + batchSize);
+
+      fetch('/api/ci-status?pr_numbers=' + batch.join(','))
+        .then(res => res.json())
+        .then(statuses => {
+          Object.entries(statuses).forEach(([prNumber, status]) => {
+            const row = document.querySelector(`[data-pr-number="${prNumber}"]`);
+            if (!row) return;
+
+            const badge = row.querySelector('[data-ci-status]');
+            if (!badge) return;
+
+            const labels = {
+              green: 'Green',
+              pending_clean: 'Pending',
+              pending_failing: 'Pending (failing)',
+              failed: 'Failed',
+              unknown: 'Unknown'
+            };
+
+            badge.className = 'ci-status ci-' + status;
+            badge.textContent = labels[status] || 'Unknown';
+          });
+        })
+        .catch(err => console.error('Failed to load CI status:', err));
+    }
+  })();
+</script>
+<% end %>

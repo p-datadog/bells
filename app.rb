@@ -3,6 +3,8 @@
 require "sinatra"
 require "json"
 require_relative "lib/bells"
+require_relative "lib/bells/pr_cache"
+require_relative "lib/bells/background_refresher"
 
 set :public_folder, File.join(__dir__, "public")
 set :views, File.join(__dir__, "views")
@@ -10,13 +12,41 @@ set :views, File.join(__dir__, "views")
 # Enable HTML auto-escaping for XSS protection
 set :erb, escape_html: true
 
+# Initialize PR cache (Solution #1: In-memory caching)
+PR_CACHE = Bells::PrCache.new
+
+# Solution #3: Background job to pre-fetch PR data
+BACKGROUND_REFRESHER = Bells::BackgroundRefresher.new(PR_CACHE, interval: 120)
+
+configure :development, :production do
+  # Start background refresh on server start
+  BACKGROUND_REFRESHER.start
+  puts "Started background PR cache refresher (interval: 2 minutes)"
+end
+
 configure :test do
   set :permitted_hosts, []
+  # Don't start background refresher in tests
+end
+
+# Graceful shutdown
+at_exit do
+  BACKGROUND_REFRESHER.stop
 end
 
 get "/" do
-  client = Bells::GitHubClient.new
-  all_prs = client.pull_requests
+  # Solution #1: Cache PR list and CI statuses for 2 minutes
+  pr_data = PR_CACHE.fetch("pr_list") do
+    client = Bells::GitHubClient.new
+    prs = client.pull_requests
+
+    # Fetch CI status for all PRs
+    ci_statuses = prs.to_h { |pr| [pr.number, client.ci_status(pr.head.sha)] }
+
+    { prs: prs, ci_statuses: ci_statuses }
+  end
+
+  all_prs = pr_data[:prs]
 
   default_author = ENV["BELLS_DEFAULT_AUTHOR"]
   show_all = params[:show_all] == "true"
@@ -26,7 +56,9 @@ get "/" do
   @author_filter = params[:author] || (default_author unless show_all)
 
   @pull_requests = @author_filter ? all_prs.select { |pr| pr.user.login == @author_filter } : all_prs
-  @ci_status = @pull_requests.to_h { |pr| [pr.number, client.ci_status(pr.head.sha)] }
+  @ci_status = pr_data[:ci_statuses]
+  @use_lazy_load = params[:lazy] == "true"
+
   erb :index
 end
 
@@ -38,6 +70,41 @@ get "/pr/:number" do
   @ci_status = client.ci_status(pr.head.sha)
   @results = Bells.analyze_pr(@pr_number)
   erb :pr_analysis
+end
+
+# Solution #2: API endpoint for lazy-loading CI statuses
+get "/api/ci-status" do
+  content_type :json
+
+  pr_numbers = params[:pr_numbers]&.split(",")&.map(&:to_i)
+
+  if pr_numbers.nil? || pr_numbers.empty?
+    return halt 400, { error: "Missing pr_numbers parameter" }.to_json
+  end
+
+  if pr_numbers.size > 50
+    return halt 400, { error: "Too many PR numbers (max 50)" }.to_json
+  end
+
+  client = Bells::GitHubClient.new
+
+  # Fetch CI status for requested PRs
+  statuses = pr_numbers.each_with_object({}) do |pr_number, hash|
+    # Use cache to avoid re-fetching
+    hash[pr_number] = PR_CACHE.fetch("ci_status:#{pr_number}", ttl: 60) do
+      begin
+        pr = client.pull_request(pr_number)
+        client.ci_status(pr.head.sha).to_s
+      rescue Octokit::NotFound
+        "unknown"
+      rescue => e
+        warn "Failed to fetch CI status for PR #{pr_number}: #{e.message}"
+        "unknown"
+      end
+    end
+  end
+
+  statuses.to_json
 end
 
 get "/api/pr/:number" do

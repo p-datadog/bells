@@ -11,6 +11,10 @@ RSpec.describe "XSS Protection" do
     Sinatra::Application
   end
 
+  before(:each) do
+    PR_CACHE.clear
+  end
+
   describe "GET /" do
     let(:mock_client) { instance_double(Bells::GitHubClient) }
     let(:xss_pr) do
