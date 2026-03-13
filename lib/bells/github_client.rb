@@ -77,6 +77,21 @@ module Bells
       nil
     end
 
+    def restart_job(job_id)
+      url = "https://api.github.com/repos/#{REPO}/actions/jobs/#{job_id}/rerun"
+
+      conn = Faraday.new do |f|
+        f.response :follow_redirects
+      end
+
+      response = conn.post(url) do |req|
+        req.headers["Authorization"] = "Bearer #{@token}" if @token
+        req.headers["Accept"] = "application/vnd.github+json"
+      end
+
+      response.success?
+    end
+
     def download_junit_artifacts(pr_number, cache_dir:)
       pr_cache = File.join(cache_dir, pr_number.to_s)
       FileUtils.mkdir_p(pr_cache)

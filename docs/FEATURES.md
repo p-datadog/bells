@@ -22,6 +22,7 @@ Analyze CI failures in dd-trace-rb pull requests, grouped by category.
 - Failed - Completed with failures
 
 **Failure Categories:**
+- Meta - all-jobs-are-green (meta-check that waits for other jobs)
 - Type Check - steep/typecheck, type checking jobs
 - Lint - rubocop, standard, actionlint, yaml-lint
 - Security - CodeQL, semgrep
@@ -30,10 +31,13 @@ Analyze CI failures in dd-trace-rb pull requests, grouped by category.
 - Uncategorized - anything else
 
 **Components:**
-- `Bells::GitHubClient` - Fetches workflow runs, CI status, failed jobs, and JUnit artifacts
+- `Bells::GitHubClient` - Fetches workflow runs, CI status, failed jobs, and JUnit artifacts. Includes restart_job method.
 - `Bells::FailureCategorizer` - Categorizes failed jobs by type
 - `Bells::JunitParser` - Parses JUnit XML files to extract test failures
 - `Bells::FailureAggregator` - Groups test failures, identifies flaky tests
+
+**Auto-Restart:**
+When "all-jobs-are-green" is the only failing job, it's automatically restarted in the background. This meta-check often fails due to race conditions when it runs before other jobs complete. A notice is displayed on the PR analysis page when auto-restart occurs.
 
 **Configuration:**
 - `BELLS_DEFAULT_AUTHOR` - Optional environment variable to filter PRs by a specific author by default. When set, the home page shows only that author's PRs, with an "All PRs" link to view all.

@@ -4,6 +4,7 @@ module Bells
   class FailureCategorizer
     # Order matters - more specific patterns first
     CATEGORIES = [
+      [:meta, /\Aall-jobs-are-green\z/],
       [:type_check, /steep|typecheck|type.?check|rbs/i],
       [:lint, %r{lint|rubocop|standard/|actionlint|yaml-lint|semgrep|zizmor}i],
       [:security, /codeql|security|semgrep/i],
@@ -12,6 +13,7 @@ module Bells
     ].freeze
 
     CATEGORY_LABELS = {
+      meta: "Meta",
       type_check: "Type Check",
       lint: "Lint",
       security: "Security",
@@ -51,7 +53,7 @@ module Bells
 
       # Ensure consistent ordering
       result = {}
-      [:type_check, :lint, :security, :tests, :build, :uncategorized].each do |cat|
+      [:meta, :type_check, :lint, :security, :tests, :build, :uncategorized].each do |cat|
         result[cat] = grouped[cat] if grouped[cat]&.any?
       end
       result

@@ -11,6 +11,12 @@ RSpec.describe Bells::FailureCategorizer do
       OpenStruct.new(name: name, id: 123, html_url: "https://github.com/example")
     end
 
+    it "categorizes meta check job" do
+      job = mock_job(Bells::META_CHECK_JOB_NAME)
+      result = categorizer.categorize_job(job)
+      expect(result.category).to eq(:meta)
+    end
+
     it "categorizes type check jobs" do
       job = mock_job("steep/typecheck")
       result = categorizer.categorize_job(job)
