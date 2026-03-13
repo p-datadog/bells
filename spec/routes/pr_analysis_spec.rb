@@ -127,6 +127,7 @@ RSpec.describe "PR Analysis Routes" do
         meta_failures: nil,
         test_details: { total_failures: 0, unique_tests: 0, flaky_tests: 0, aggregated: [] },
         total_failed_jobs: 1,
+        in_progress_jobs: 0,
         auto_restarted: false,
         download_errors: []
       )
@@ -150,6 +151,7 @@ RSpec.describe "PR Analysis Routes" do
         meta_failures: nil,
         test_details: { total_failures: 0, unique_tests: 0, flaky_tests: 0, aggregated: [] },
         total_failed_jobs: 1,
+        in_progress_jobs: 0,
         auto_restarted: true,
         download_errors: []
       )
@@ -169,6 +171,7 @@ RSpec.describe "PR Analysis Routes" do
         meta_failures: nil,
         test_details: { total_failures: 0, unique_tests: 0, flaky_tests: 0, aggregated: [] },
         total_failed_jobs: 0,
+        in_progress_jobs: 0,
         auto_restarted: false,
         download_errors: ["Failed to download artifact junit-test: HTTP 404", "Failed to download artifact results: empty response"]
       )
@@ -201,6 +204,7 @@ RSpec.describe "PR Analysis Routes" do
         meta_failures: nil,
         test_details: { total_failures: 2, unique_tests: 2, flaky_tests: 0, aggregated: [] },
         total_failed_jobs: 1,
+        in_progress_jobs: 0,
         auto_restarted: false,
         download_errors: []
       )

@@ -60,6 +60,12 @@ module Bells
       check_runs.select { |run| run.conclusion == "failure" }
     end
 
+    def in_progress_jobs_for_pr(pr_number)
+      pr = @client.pull_request(REPO, pr_number)
+      check_runs = with_auto_paginate { @client.check_runs_for_ref(REPO, pr.head.sha)[:check_runs] }
+      check_runs.select { |run| run.status != "completed" }
+    end
+
     def job_logs(job_id)
       url = "https://api.github.com/repos/#{REPO}/actions/jobs/#{job_id}/logs"
 
@@ -118,9 +124,12 @@ module Bells
       artifacts = with_auto_paginate { @client.workflow_run_artifacts(REPO, run.id)[:artifacts] }
       junit_artifacts = artifacts.select { |a| a.name.match?(/junit|test-results/i) }
 
-      junit_artifacts.map do |artifact|
-        download_artifact(artifact, run, cache_dir)
-      end.compact
+      # Download artifacts in parallel
+      threads = junit_artifacts.map do |artifact|
+        Thread.new { download_artifact(artifact, run, cache_dir) }
+      end
+
+      threads.map(&:value).compact
     end
 
     def download_artifact(artifact, run, cache_dir)
