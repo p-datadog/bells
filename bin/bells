@@ -1,0 +1,24 @@
+#!/usr/bin/env ruby
+# frozen_string_literal: true
+
+require 'optparse'
+
+options = {}
+OptionParser.new do |opts|
+  opts.banner = "Usage: bin/bells [options]"
+
+  opts.on("-a", "--author AUTHOR", "Filter PRs by author on homepage") do |author|
+    options[:author] = author
+  end
+
+  opts.on("-h", "--help", "Prints this help") do
+    puts opts
+    exit
+  end
+end.parse!
+
+# Set environment variable if author specified
+ENV['BELLS_DEFAULT_AUTHOR'] = options[:author] if options[:author]
+
+# Execute puma with any remaining arguments
+exec('bundle', 'exec', 'puma', *ARGV)
