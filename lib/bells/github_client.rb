@@ -5,14 +5,15 @@ require "faraday"
 require "faraday/follow_redirects"
 require "zip"
 require "fileutils"
+require "open3"
 
 module Bells
   class GitHubClient
     REPO = "DataDog/dd-trace-rb"
 
     def initialize(token: nil)
-      @token = token || ENV["GITHUB_TOKEN"] || `gh auth token 2>/dev/null`.strip
-      @token = nil if @token.empty?
+      @token = token || ENV["GITHUB_TOKEN"] || fetch_gh_token
+      @token = nil if @token&.empty?
       @client = Octokit::Client.new(access_token: @token)
       @client.auto_paginate = false
     end
@@ -205,6 +206,15 @@ module Bells
           entry.extract(extract_path) { true }
         end
       end
+    end
+
+    def fetch_gh_token
+      # Use Open3 instead of backticks to avoid shell injection
+      stdout, status = Open3.capture2("gh", "auth", "token", err: File::NULL)
+      status.success? ? stdout.strip : nil
+    rescue Errno::ENOENT
+      # gh command not found
+      nil
     end
   end
 end
