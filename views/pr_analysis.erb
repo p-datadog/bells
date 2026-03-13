@@ -11,23 +11,7 @@
 </div>
 <% end %>
 
-<div class="card">
-  <h2>Summary</h2>
-  <div class="summary">
-    <div class="stat">
-      <div class="stat-value"><%= @results[:total_failed_jobs] %></div>
-      <div class="stat-label">Failed Jobs</div>
-    </div>
-    <div class="stat">
-      <div class="stat-value"><%= @results[:test_details][:unique_tests] %></div>
-      <div class="stat-label">Failed Tests</div>
-    </div>
-    <div class="stat">
-      <div class="stat-value"><%= @results[:test_details][:flaky_tests] %></div>
-      <div class="stat-label">Flaky Tests</div>
-    </div>
-  </div>
-</div>
+<p><strong><%= @results[:total_failed_jobs] %></strong> failed jobs, <strong><%= @results[:test_details][:unique_tests] %></strong> failed tests<% if @results[:test_details][:flaky_tests] > 0 %> (<strong><%= @results[:test_details][:flaky_tests] %></strong> flaky)<% end %></p>
 
 <% if @results[:categorized_failures].any? %>
   <% @results[:categorized_failures].each do |category, failures| %>

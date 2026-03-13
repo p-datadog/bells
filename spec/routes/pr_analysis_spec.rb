@@ -138,7 +138,7 @@ RSpec.describe "PR Analysis Routes" do
       expect(last_response.body).to include("PR #123")
       expect(last_response.body).to include("Test PR Title")
       expect(last_response.body).to include("Failed")
-      expect(last_response.body).to include("Failed Jobs")
+      expect(last_response.body).to include("failed jobs")
       expect(last_response.body).to include("Type Check")
       expect(last_response.body).to include("steep/typecheck")
     end
