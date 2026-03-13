@@ -108,6 +108,11 @@ module Bells
     def failed_jobs_for_pr(pr_number)
       # Use check_runs_for_ref, filter by conclusion == "failure"
 
+    # Get job logs (for infrastructure failure detection)
+    def job_logs(job_id)
+      # GET /repos/{owner}/{repo}/actions/jobs/{job_id}/logs
+      # Returns log text, or nil on error
+
     # Download JUnit artifacts from failed runs
     def download_junit_artifacts(pr_number, cache_dir:)
       # For each failed run, get artifacts matching /junit|test-results/i
@@ -204,6 +209,7 @@ module Bells
   class FailureCategorizer
     # Pattern matching for job names (order matters - specific first)
     CATEGORIES = [
+      [:meta, /\Aall-jobs-are-green\z/],
       [:type_check, /steep|typecheck|type.?check|rbs/i],
       [:lint, %r{lint|rubocop|standard/|actionlint|yaml-lint|semgrep|zizmor}i],
       [:security, /codeql|security|semgrep/i],
@@ -211,7 +217,21 @@ module Bells
       [:build, /\bbuild\b|compile|bundle/i]
     ]
 
+    # Infrastructure failure patterns for log analysis
+    # Detects GitHub Actions/API failures, runner issues, network problems
+    INFRASTRUCTURE_PATTERNS = [
+      /Failed to download action/i,
+      /Response status code does not indicate success.*401/i,
+      /Response status code does not indicate success.*5\d{2}/i,
+      /The self-hosted runner.*lost communication/i,
+      /Connection timed out/i,
+      /No space left on device/i,
+      # ... (see lib/bells/failure_categorizer.rb for full list)
+    ]
+
     CATEGORY_LABELS = {
+      meta: "Meta",
+      infrastructure: "Infrastructure",
       type_check: "Type Check",
       lint: "Lint",
       security: "Security",
@@ -225,14 +245,25 @@ module Bells
       keyword_init: true
     )
 
-    def categorize_job(job)
-      # Match job.name against patterns, return JobFailure
+    def categorize_job(job, github_client: nil)
+      # 1. Check job logs for infrastructure failure patterns (takes precedence)
+      # 2. Fall back to name-based categorization
+      # Returns JobFailure with details field populated for infrastructure failures
 
-    def categorize_jobs(jobs)
+    def categorize_jobs(jobs, github_client: nil)
     def group_by_category(job_failures)
-      # Return hash ordered by: type_check, lint, security, tests, build, uncategorized
+      # Return hash ordered by: meta, infrastructure, type_check, lint, security, tests, build, uncategorized
 
     def self.category_label(category)
+
+    private
+
+    def check_for_infrastructure_failure(job_id, github_client)
+      # Fetches job logs and scans for infrastructure patterns
+      # Returns { is_infrastructure: bool, details: error_snippet }
+
+    def extract_error_snippet(logs, match)
+      # Extracts 5 lines of context around the error
   end
 end
 ```

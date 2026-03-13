@@ -23,6 +23,7 @@ Analyze CI failures in dd-trace-rb pull requests, grouped by category.
 
 **Failure Categories:**
 - Meta - all-jobs-are-green (meta-check that waits for other jobs)
+- Infrastructure - GitHub Actions/API failures, runner issues, network problems (detected by analyzing job logs)
 - Type Check - steep/typecheck, type checking jobs
 - Lint - rubocop, standard, actionlint, yaml-lint
 - Security - CodeQL, semgrep
@@ -31,8 +32,8 @@ Analyze CI failures in dd-trace-rb pull requests, grouped by category.
 - Uncategorized - anything else
 
 **Components:**
-- `Bells::GitHubClient` - Fetches workflow runs, CI status, failed jobs, and JUnit artifacts. Includes restart_job method.
-- `Bells::FailureCategorizer` - Categorizes failed jobs by type
+- `Bells::GitHubClient` - Fetches workflow runs, CI status, failed jobs, JUnit artifacts, and job logs. Includes restart_job method.
+- `Bells::FailureCategorizer` - Categorizes failed jobs by type. Analyzes job logs to detect infrastructure failures (GitHub API errors, runner issues, network problems) that take precedence over name-based categorization.
 - `Bells::JunitParser` - Parses JUnit XML files to extract all test results (passes and failures)
 - `Bells::FailureAggregator` - Groups test results and detects true flaky tests (tests that both pass and fail in the same PR)
 
