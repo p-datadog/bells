@@ -43,6 +43,13 @@ When "all-jobs-are-green" is the only failing job, it's automatically restarted 
 **Configuration:**
 - `BELLS_DEFAULT_AUTHOR` - Optional environment variable to filter PRs by a specific author by default. When set, the home page shows only that author's PRs, with an "All PRs" link to view all.
 
+**Security:**
+- XSS protection via automatic HTML escaping (erubi)
+- Zip Slip protection for artifact extraction
+- XXE injection protection for JUnit XML parsing
+- Command injection protection (Open3 instead of backticks)
+- See docs/SECURITY.md for complete security review
+
 **Usage:**
 ```bash
 # Production
