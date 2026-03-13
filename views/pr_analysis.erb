@@ -1,6 +1,5 @@
-<h1>PR #<%= @pr_number %> - Failure Analysis</h1>
+<h1>PR #<%= @pr_number %>: <%= @pr_title %></h1>
 <p>
-  <strong><%= @pr_title %></strong><br>
   CI Status: <span class="ci-status ci-<%= @ci_status %>"><%= {green: "Green", pending_clean: "Pending", pending_failing: "Pending (failing)", failed: "Failed", unknown: "Unknown"}[@ci_status] %></span>
 </p>
 <p><a href="/">Back</a> | <a href="https://github.com/DataDog/dd-trace-rb/pull/<%= @pr_number %>">View on GitHub</a></p>
