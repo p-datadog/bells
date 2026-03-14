@@ -75,7 +75,8 @@ get "/pr/:number" do
   pr = client.pull_request(@pr_number)
   @pr_title = pr.title
   @pr_author = pr.user.login
-  @ci_status = client.ci_status(pr.head.sha)
+  @pr_head_sha = pr.head.sha
+  @ci_status = client.ci_status(@pr_head_sha)
 
   # Use streaming in development/production, not in tests
   @use_streaming = settings.environment != :test
@@ -90,6 +91,7 @@ end
 
 get "/pr/:number/stream" do
   pr_number = params[:number].to_i
+  ci_status = params[:ci_status]&.to_sym
 
   # Set SSE headers
   content_type "text/event-stream"
@@ -98,19 +100,9 @@ get "/pr/:number/stream" do
 
   stream(:keep_open) do |out|
     begin
-      client = Bells::GitHubClient.new
-      pr = client.pull_request(pr_number)
-
-      # Send basic PR info immediately
-      out << "event: pr_basic\n"
-      out << "data: #{json(number: pr_number, title: pr.title, author: pr.user.login)}\n\n"
-
-      ci_status = client.ci_status(pr.head.sha)
-      out << "event: ci_status\n"
-      out << "data: #{json(status: ci_status.to_s)}\n\n"
-
       # Run analysis with progress callbacks
-      Bells.analyze_pr_streaming(pr_number, pr: pr) do |event, data|
+      # Pass ci_status to potentially skip expensive operations
+      Bells.analyze_pr_streaming(pr_number, ci_status: ci_status) do |event, data|
         out << "event: #{event}\n"
         out << "data: #{data.to_json}\n\n"
       end

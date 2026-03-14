@@ -130,9 +130,12 @@ module Bells
       workflow_runs_for_pr(pr_number, pr: pr).select { |run| run.conclusion == "failure" }
     end
 
-    def check_runs_for_pr(pr_number, pr: nil)
+    def check_runs_for_pr(pr_number, pr: nil, limit: 100)
       pr ||= @client.pull_request(REPO, pr_number)
-      with_auto_paginate { @client.check_runs_for_ref(REPO, pr.head.sha)[:check_runs] }
+      # Limit to most recent check runs for performance
+      # Don't use auto_paginate - just get first page
+      response = @client.check_runs_for_ref(REPO, pr.head.sha, per_page: limit)
+      response[:check_runs]
     end
 
     def failed_jobs_for_pr(pr_number, pr: nil, check_runs: nil)

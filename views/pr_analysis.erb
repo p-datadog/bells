@@ -68,7 +68,8 @@
 <script>
 (function() {
   const prNumber = <%= @pr_number %>;
-  const eventSource = new EventSource('/pr/' + prNumber + '/stream');
+  const ciStatus = '<%= @ci_status %>';
+  const eventSource = new EventSource('/pr/' + prNumber + '/stream?ci_status=' + ciStatus);
 
   eventSource.addEventListener('job_list', function(e) {
     const data = JSON.parse(e.data);
@@ -84,7 +85,26 @@
     document.getElementById('job-summary-content').innerHTML = html;
   });
 
-  eventSource.addEventListener('categorized_failures', function(e) {
+  eventSource.addEventListener('categorized_failures_initial', function(e) {
+    const data = JSON.parse(e.data);
+
+    document.getElementById('categorized-loading').innerHTML = '<p>⏳ Checking for infrastructure failures...</p><p><small>Downloading job logs in parallel...</small></p>';
+
+    let html = '';
+
+    if (data.categorized && Object.keys(data.categorized).length > 0) {
+      for (const [category, failures] of Object.entries(data.categorized)) {
+        html += renderCategoryCard(category, failures);
+      }
+    } else {
+      html = '<div class="card"><p>No CI failures found for this PR.</p></div>';
+    }
+
+    document.getElementById('categorized-content').innerHTML = html;
+    document.getElementById('categorized-content').style.display = 'block';
+  });
+
+  eventSource.addEventListener('categorized_failures_final', function(e) {
     const data = JSON.parse(e.data);
 
     // Show auto-restart notice if applicable

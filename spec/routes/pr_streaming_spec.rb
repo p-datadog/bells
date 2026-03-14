@@ -31,8 +31,11 @@ RSpec.describe "PR Streaming Routes" do
         :job_list,
         { failed_jobs: 2, in_progress: 0, passed_jobs: 10 }
       ).and_yield(
-        :categorized_failures,
-        { categorized: { tests: [] }, meta_failures: nil }
+        :categorized_failures_initial,
+        { categorized: { tests: [] }, meta_failures: nil, auto_restarted: false }
+      ).and_yield(
+        :categorized_failures_final,
+        { categorized: { tests: [] }, meta_failures: nil, auto_restarted: false }
       ).and_yield(
         :test_details,
         { total_failures: 5, unique_tests: 3, flaky_tests: 1, aggregated: [] }
@@ -46,18 +49,16 @@ RSpec.describe "PR Streaming Routes" do
 
       body = last_response.body
 
-      # Check for expected events
-      expect(body).to include("event: pr_basic")
-      expect(body).to include("event: ci_status")
+      # Check for expected events (no pr_basic/ci_status - those are in skeleton)
       expect(body).to include("event: job_list")
-      expect(body).to include("event: categorized_failures")
+      expect(body).to include("event: categorized_failures_initial")
+      expect(body).to include("event: categorized_failures_final")
       expect(body).to include("event: test_details")
       expect(body).to include("event: complete")
 
       # Check data content
-      expect(body).to include('"number":123')
-      expect(body).to include('"title":"Test PR"')
       expect(body).to include('"failed_jobs":2')
+      expect(body).to include('"unique_tests":3')
     end
 
     it "handles errors gracefully" do
@@ -96,7 +97,7 @@ RSpec.describe "PR Streaming Routes" do
       expect(last_response).to be_ok
       expect(last_response.body).to include("PR #123: Test PR")
       expect(last_response.body).to include("Author: testuser")
-      expect(last_response.body).to include("EventSource('/pr/' + prNumber + '/stream')")
+      expect(last_response.body).to include("EventSource('/pr/' + prNumber + '/stream")
       expect(last_response.body).to include("job-summary-loading")
       expect(last_response.body).to include("categorized-loading")
       expect(last_response.body).to include("test-details-loading")

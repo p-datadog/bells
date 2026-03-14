@@ -95,12 +95,34 @@ module Bells
       result
     end
 
-    def analyze_pr_streaming(pr_number, cache_dir: ".cache", pr: nil, &on_progress)
+    def analyze_pr_streaming(pr_number, cache_dir: ".cache", pr: nil, ci_status: nil, &on_progress)
+      start_time = Time.now
+      log_timing = ->(msg) { puts "[TIMING] #{((Time.now - start_time) * 1000).to_i}ms - #{msg}" }
+
       client = GitHubClient.new
+      log_timing.call("GitHubClient initialized")
+
+      # If CI status is green, skip everything - all jobs passed
+      if ci_status == :green
+        log_timing.call("CI status green - skipping expensive operations (no failures)")
+
+        yield(:job_list, { failed_jobs: 0, in_progress: 0, passed_jobs: 0 })
+        yield(:categorized_failures_initial, { categorized: {}, meta_failures: nil, auto_restarted: false })
+        yield(:categorized_failures_final, { categorized: {}, meta_failures: nil, auto_restarted: false })
+        yield(:test_details, { total_failures: 0, unique_tests: 0, flaky_tests: 0, aggregated: [] })
+
+        log_timing.call("All events sent for passing PR")
+        return nil
+      end
+
+      # Fetch PR if not provided
       pr ||= client.pull_request(pr_number)
+      log_timing.call("PR fetched (or reused)")
 
       # Check cache first - if cached, send all events immediately
       cached = load_cached_analysis(pr_number, cache_dir, pr)
+      log_timing.call("Cache checked (#{cached ? 'HIT' : 'MISS'})")
+
       if cached
         yield(:job_list, {
           failed_jobs: cached[:total_failed_jobs],
@@ -108,9 +130,18 @@ module Bells
           passed_jobs: cached[:passed_jobs]
         })
 
-        yield(:categorized_failures, {
+        # For cached results, send both categorization events immediately
+        # (no delay since we already have the final data)
+        yield(:categorized_failures_initial, {
           categorized: serialize_failures_for_json(cached[:categorized_failures]),
-          meta_failures: serialize_failures_for_json(cached[:meta_failures])
+          meta_failures: serialize_failures_for_json(cached[:meta_failures]),
+          auto_restarted: cached[:auto_restarted]
+        })
+
+        yield(:categorized_failures_final, {
+          categorized: serialize_failures_for_json(cached[:categorized_failures]),
+          meta_failures: serialize_failures_for_json(cached[:meta_failures]),
+          auto_restarted: cached[:auto_restarted]
         })
 
         yield(:test_details, cached[:test_details])
@@ -124,9 +155,12 @@ module Bells
 
       # Fetch check runs
       check_runs = client.check_runs_for_pr(pr_number, pr: pr)
+      log_timing.call("Check runs fetched (#{check_runs.size} total)")
+
       failed_jobs = client.failed_jobs_for_pr(pr_number, pr: pr, check_runs: check_runs)
       in_progress_jobs = client.in_progress_jobs_for_pr(pr_number, pr: pr, check_runs: check_runs)
       passed_jobs = check_runs.select { |run| run.conclusion == "success" }
+      log_timing.call("Jobs filtered (#{failed_jobs.size} failed, #{in_progress_jobs.size} in progress, #{passed_jobs.size} passed)")
 
       # Send job list event
       yield(:job_list, {
@@ -136,9 +170,32 @@ module Bells
         failed_job_names: failed_jobs.map(&:name)
       })
 
-      # Categorize jobs (downloads logs)
-      job_failures = categorizer.categorize_jobs(failed_jobs, github_client: client)
+      log_timing.call("EVENT 1: job_list sent")
+
+      # Phase 1: Send initial categorization WITHOUT infrastructure detection
+      # This is fast (name-based only, no log downloads)
+      initial_job_failures = categorizer.categorize_jobs(failed_jobs, github_client: nil)
+      initial_categorized = categorizer.group_by_category(initial_job_failures)
+      log_timing.call("Initial categorization complete (name-based, no logs)")
+
+      yield(:categorized_failures_initial, {
+        categorized: serialize_failures_for_json(initial_categorized),
+        meta_failures: nil,
+        auto_restarted: false
+      })
+      log_timing.call("EVENT 2: categorized_failures_initial sent")
+
+      # Phase 2: Download logs in parallel and send updated categorization
+      # Parallelize the log downloads for infrastructure detection
+      log_timing.call("Starting parallel log downloads for #{failed_jobs.size} jobs...")
+      threads = failed_jobs.map do |job|
+        Thread.new { categorizer.categorize_job(job, github_client: client) }
+      end
+      job_failures = threads.map(&:value)
+      log_timing.call("Parallel log downloads complete")
+
       categorized = categorizer.group_by_category(job_failures)
+      log_timing.call("Final categorization complete (with infrastructure detection)")
 
       # Auto-restart meta-check job if it's the only failure
       auto_restarted = false
@@ -159,25 +216,61 @@ module Bells
         meta_failures = categorized.delete(:meta)
       end
 
-      # Send categorized failures event
-      yield(:categorized_failures, {
+      # Send final categorized failures event
+      yield(:categorized_failures_final, {
         categorized: serialize_failures_for_json(categorized),
         meta_failures: serialize_failures_for_json(meta_failures),
         auto_restarted: auto_restarted
       })
+      log_timing.call("EVENT 3: categorized_failures_final sent")
+
+      # Skip artifact downloads if no failed jobs (all passed or only in-progress)
+      if failed_jobs.empty?
+        log_timing.call("No failed jobs - skipping artifact downloads and parsing")
+
+        yield(:test_details, {
+          total_failures: 0,
+          unique_tests: 0,
+          flaky_tests: 0,
+          aggregated: []
+        })
+        log_timing.call("EVENT 4: test_details sent (empty)")
+
+        result = {
+          categorized_failures: categorized,
+          meta_failures: meta_failures,
+          test_details: { total_failures: 0, unique_tests: 0, flaky_tests: 0, aggregated: [] },
+          total_failed_jobs: 0,
+          in_progress_jobs: in_progress_jobs.size,
+          passed_jobs: passed_jobs.size,
+          auto_restarted: auto_restarted,
+          download_errors: []
+        }
+
+        save_cached_analysis(pr_number, cache_dir, pr, result)
+        log_timing.call("Analysis cached to disk")
+        log_timing.call("COMPLETE - Total time: #{((Time.now - start_time) * 1000).to_i}ms")
+
+        return result
+      end
 
       # Download artifacts and parse (slowest part)
+      log_timing.call("Starting artifact downloads...")
       download_result = client.download_junit_artifacts(pr_number, cache_dir: cache_dir, pr: pr)
       artifact_dirs = download_result[:artifact_dirs]
       download_errors = download_result[:errors]
+      log_timing.call("Artifact downloads complete (#{artifact_dirs.compact.size} artifacts)")
 
       # Parse JUnit
+      log_timing.call("Starting JUnit parsing (pass 1: failures only)...")
       test_failures = artifact_dirs.flat_map do |dir|
         parser.parse_directory_failures_only(dir) if dir && File.directory?(dir)
       end.compact
+      log_timing.call("JUnit pass 1 complete (#{test_failures.size} failures found)")
 
       failed_test_ids = test_failures.map { |f| "#{f.test_class}##{f.test_name}" }.uniq
 
+      log_timing.call("Starting JUnit parsing (pass 2: full results for #{failed_test_ids.size} tests)...")
       test_results = if failed_test_ids.any?
         artifact_dirs.flat_map do |dir|
           parser.parse_directory_for_tests(dir, failed_test_ids) if dir && File.directory?(dir)
@@ -185,11 +278,14 @@ module Bells
       else
         []
       end
+      log_timing.call("JUnit pass 2 complete (#{test_results.size} test results)")
 
       test_summary = aggregator.summary(test_results)
+      log_timing.call("Test summary aggregated")
 
       # Send test details event
       yield(:test_details, test_summary)
+      log_timing.call("EVENT 4: test_details sent")
 
       # Build result for caching
       result = {
@@ -237,6 +333,15 @@ module Bells
 
       # Invalidate if PR head SHA changed
       return nil if cached[:head_sha] != pr.head.sha
+
+      # Convert structs back
+      deserialize_cached_analysis(cached)
+    rescue => e
+      warn "Failed to load cache for PR #{pr_number}: #{e.message}"
+      nil
+    end
+
+    def deserialize_cached_analysis(cached)
 
       # Convert JobFailure structs back from hashes
       if cached[:categorized_failures]
