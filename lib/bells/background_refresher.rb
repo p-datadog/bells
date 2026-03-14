@@ -111,11 +111,13 @@ module Bells
         if author_prs.any?
           puts "[#{Time.now}] Background refresh: Pre-warming #{author_prs.size} PRs for author #{@default_author}..."
 
+          warm_start = Time.now
           author_prs.each do |pr|
             warm_pr_analysis(pr.number, pr)
           end
+          warm_duration = Time.now - warm_start
 
-          puts "[#{Time.now}] Background refresh: Pre-warming complete for #{@default_author}"
+          puts "[#{Time.now}] Background refresh: Pre-warming complete for #{@default_author} (%.2fs total)" % warm_duration
         end
       end
     end
@@ -123,10 +125,13 @@ module Bells
     def warm_pr_analysis(pr_number, pr)
       # Run full analysis to pre-populate cache
       # Errors are caught and logged, but don't fail the entire refresh
+      start_time = Time.now
       Bells.analyze_pr(pr_number, pr: pr)
-      puts "[#{Time.now}]   ✓ Warmed PR ##{pr_number}"
+      duration = Time.now - start_time
+      puts "[#{Time.now}]   ✓ Warmed PR ##{pr_number} (%.2fs)" % duration
     rescue => e
-      warn "[#{Time.now}]   ✗ Failed to warm PR ##{pr_number}: #{e.message}"
+      duration = Time.now - start_time
+      warn "[#{Time.now}]   ✗ Failed to warm PR ##{pr_number} (%.2fs): #{e.message}" % duration
       # Don't raise - continue with other PRs
     end
   end
