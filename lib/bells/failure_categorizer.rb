@@ -46,6 +46,10 @@ module Bells
       /Network is unreachable/i,
       /The operation was canceled/i, # Often indicates timeout
 
+      # MongoDB/Database service failures (container initialization issues)
+      /Mongo::Error::NoServerAvailable.*dead monitor threads/m,
+      /No \w+ server is available in cluster.*topology=Unknown.*UNKNOWN NO-MONITORING/m,
+
       # Resource/quota issues
       /Error: No space left on device/i,
       /Out of memory/i,

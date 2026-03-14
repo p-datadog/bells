@@ -368,6 +368,63 @@ RSpec.describe Bells::FailureCategorizer do
       end
     end
 
+    context "when logs contain MongoDB/database service failures" do
+      it "detects MongoDB NoServerAvailable with dead monitor threads as infrastructure failure" do
+        logs = <<~LOGS
+          Failures:
+
+            1) Mongo::Client instrumentation with json_command configured to false behaves like with json_command configured to a failed query behaves like a MongoDB trace behaves like analytics for integration when configured by environment variable and explicitly disabled and global flag is explicitly enabled behaves like sample rate value isn't set
+               Got 0 failures and 2 other errors:
+
+               1.1) Failure/Error: before { client[collection].drop }
+                    Mongo::Error::NoServerAvailable:
+                      No primary_preferred server is available in cluster: #<Cluster topology=Unknown[mongodb:27017] servers=[#<Server address=mongodb:27017 UNKNOWN NO-MONITORING>]> with timeout=30, LT=0.015. The following servers have dead monitor threads: #<Server address=mongodb:27017 UNKNOWN NO-MONITORING>
+
+               1.2) Failure/Error: client.database.drop if drop_database?
+                    Mongo::Error::NoServerAvailable:
+                      No primary_preferred server is available in cluster: #<Cluster topology=Unknown[mongodb:27017] servers=[#<Server address=mongodb:27017 UNKNOWN NO-MONITORING>]> with timeout=30, LT=0.015. The following servers have dead monitor threads: #<Server address=mongodb:27017 UNKNOWN NO-MONITORING>
+
+          911 examples, 1 failure, 1 pending
+        LOGS
+
+        allow(mock_github_client).to receive(:job_logs).with(123).and_return(logs)
+
+        result = categorizer.categorize_job(job, github_client: mock_github_client)
+
+        expect(result.category).to eq(:infrastructure)
+        expect(result.details).to include("dead monitor threads")
+      end
+
+      it "detects MongoDB cluster topology unknown with dead monitoring as infrastructure failure" do
+        logs = <<~LOGS
+          No primary server is available in cluster: #<Cluster topology=Unknown[mongodb:27017]>
+          The following servers have dead monitor threads: #<Server address=mongodb:27017 UNKNOWN NO-MONITORING>
+        LOGS
+
+        allow(mock_github_client).to receive(:job_logs).with(123).and_return(logs)
+
+        result = categorizer.categorize_job(job, github_client: mock_github_client)
+
+        expect(result.category).to eq(:infrastructure)
+      end
+
+      it "does NOT categorize plain MongoDB connection errors as infrastructure" do
+        # Without "dead monitor threads", this is a code issue (connection config, etc.)
+        logs = <<~LOGS
+          Mongo::Error::NoServerAvailable:
+            No server is available matching preference: #<Mongo::ServerSelector::Primary>
+        LOGS
+
+        allow(mock_github_client).to receive(:job_logs).with(123).and_return(logs)
+
+        result = categorizer.categorize_job(job, github_client: mock_github_client)
+
+        # Should fall back to name-based categorization (tests)
+        expect(result.category).to eq(:tests)
+        expect(result.details).to be_nil
+      end
+    end
+
     context "when logs contain code failures" do
       it "does not categorize test failures as infrastructure" do
         logs = <<~LOGS
