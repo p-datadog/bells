@@ -44,8 +44,10 @@ When "all-jobs-are-green" is the only failing job, it's automatically restarted 
 **Configuration:**
 - `BELLS_DEFAULT_AUTHOR` - Optional environment variable to filter PRs by a specific author by default. When set:
   - Home page shows only that author's PRs (with "All PRs" link to view all)
-  - Background refresher pre-warms full PR analysis for all PRs by that author
+  - Background refresher pre-warms full PR analysis for all PRs by that author (if warming enabled)
   - Makes PR detail pages instant for the author's PRs (artifacts, logs, test details cached)
+- `BELLS_BACKGROUND_REFRESH` - Set to `"false"` to disable background PR list refresh (default: enabled)
+- `BELLS_BACKGROUND_WARMING` - Set to `"false"` to disable background PR analysis warming (default: enabled). Only applies when `BELLS_DEFAULT_AUTHOR` is set
 
 **Security:**
 - XSS protection via automatic HTML escaping (erubi)

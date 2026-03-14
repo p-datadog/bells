@@ -21,20 +21,31 @@ PR_CACHE = Bells::PrCache.new
 
 # Background refresher to keep cache warm
 DEFAULT_AUTHOR = ENV["BELLS_DEFAULT_AUTHOR"]
-BACKGROUND_REFRESHER = Bells::BackgroundRefresher.new(
-  PR_CACHE,
-  interval: 120,
-  default_author: DEFAULT_AUTHOR
-)
+BACKGROUND_REFRESH_ENABLED = ENV["BELLS_BACKGROUND_REFRESH"] != "false"
+BACKGROUND_WARMING_ENABLED = ENV["BELLS_BACKGROUND_WARMING"] != "false"
 
-configure :development, :production do
-  # Start background refresh on server start
-  BACKGROUND_REFRESHER.start
-  if DEFAULT_AUTHOR
-    puts "Started background PR cache refresher (interval: 2 minutes, pre-warming PRs for #{DEFAULT_AUTHOR})"
-  else
-    puts "Started background PR cache refresher (interval: 2 minutes)"
+# Disable warming if refresh is disabled
+ENABLE_WARMING = BACKGROUND_REFRESH_ENABLED && BACKGROUND_WARMING_ENABLED && DEFAULT_AUTHOR
+
+if BACKGROUND_REFRESH_ENABLED
+  BACKGROUND_REFRESHER = Bells::BackgroundRefresher.new(
+    PR_CACHE,
+    interval: 120,
+    default_author: ENABLE_WARMING ? DEFAULT_AUTHOR : nil
+  )
+
+  configure :development, :production do
+    # Start background refresh on server start
+    BACKGROUND_REFRESHER.start
+    if ENABLE_WARMING
+      puts "Started background PR cache refresher (interval: 2 minutes, pre-warming PRs for #{DEFAULT_AUTHOR})"
+    else
+      puts "Started background PR cache refresher (interval: 2 minutes)"
+    end
   end
+else
+  puts "Background PR cache refresher disabled (BELLS_BACKGROUND_REFRESH=false)"
+  BACKGROUND_REFRESHER = nil
 end
 
 configure :test do
@@ -44,7 +55,7 @@ end
 
 # Graceful shutdown
 at_exit do
-  BACKGROUND_REFRESHER.stop
+  BACKGROUND_REFRESHER&.stop
 end
 
 get "/" do
