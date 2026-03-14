@@ -95,7 +95,132 @@ module Bells
       result
     end
 
+    def analyze_pr_streaming(pr_number, cache_dir: ".cache", pr: nil, &on_progress)
+      client = GitHubClient.new
+      pr ||= client.pull_request(pr_number)
+
+      # Check cache first - if cached, send all events immediately
+      cached = load_cached_analysis(pr_number, cache_dir, pr)
+      if cached
+        yield(:job_list, {
+          failed_jobs: cached[:total_failed_jobs],
+          in_progress: cached[:in_progress_jobs],
+          passed_jobs: cached[:passed_jobs]
+        })
+
+        yield(:categorized_failures, {
+          categorized: serialize_failures_for_json(cached[:categorized_failures]),
+          meta_failures: serialize_failures_for_json(cached[:meta_failures])
+        })
+
+        yield(:test_details, cached[:test_details])
+        return cached
+      end
+
+      # Not cached - run analysis with progress updates
+      parser = JunitParser.new
+      aggregator = FailureAggregator.new
+      categorizer = FailureCategorizer.new
+
+      # Fetch check runs
+      check_runs = client.check_runs_for_pr(pr_number, pr: pr)
+      failed_jobs = client.failed_jobs_for_pr(pr_number, pr: pr, check_runs: check_runs)
+      in_progress_jobs = client.in_progress_jobs_for_pr(pr_number, pr: pr, check_runs: check_runs)
+      passed_jobs = check_runs.select { |run| run.conclusion == "success" }
+
+      # Send job list event
+      yield(:job_list, {
+        failed_jobs: failed_jobs.size,
+        in_progress: in_progress_jobs.size,
+        passed_jobs: passed_jobs.size,
+        failed_job_names: failed_jobs.map(&:name)
+      })
+
+      # Categorize jobs (downloads logs)
+      job_failures = categorizer.categorize_jobs(failed_jobs, github_client: client)
+      categorized = categorizer.group_by_category(job_failures)
+
+      # Auto-restart meta-check job if it's the only failure
+      auto_restarted = false
+      if failed_jobs.size == 1 && failed_jobs.first.name == META_CHECK_JOB_NAME
+        job_id = failed_jobs.first.id
+        Thread.new do
+          puts "Auto-restarting #{META_CHECK_JOB_NAME} job #{job_id} for PR #{pr_number}"
+          client.restart_job(job_id)
+        rescue => e
+          warn "Failed to restart job #{job_id}: #{e.message}"
+        end
+        auto_restarted = true
+      end
+
+      # Extract meta-check failures
+      meta_failures = nil
+      if categorized.size > 1 && categorized[:meta]
+        meta_failures = categorized.delete(:meta)
+      end
+
+      # Send categorized failures event
+      yield(:categorized_failures, {
+        categorized: serialize_failures_for_json(categorized),
+        meta_failures: serialize_failures_for_json(meta_failures),
+        auto_restarted: auto_restarted
+      })
+
+      # Download artifacts and parse (slowest part)
+      download_result = client.download_junit_artifacts(pr_number, cache_dir: cache_dir, pr: pr)
+      artifact_dirs = download_result[:artifact_dirs]
+      download_errors = download_result[:errors]
+
+      # Parse JUnit
+      test_failures = artifact_dirs.flat_map do |dir|
+        parser.parse_directory_failures_only(dir) if dir && File.directory?(dir)
+      end.compact
+
+      failed_test_ids = test_failures.map { |f| "#{f.test_class}##{f.test_name}" }.uniq
+
+      test_results = if failed_test_ids.any?
+        artifact_dirs.flat_map do |dir|
+          parser.parse_directory_for_tests(dir, failed_test_ids) if dir && File.directory?(dir)
+        end.compact
+      else
+        []
+      end
+
+      test_summary = aggregator.summary(test_results)
+
+      # Send test details event
+      yield(:test_details, test_summary)
+
+      # Build result for caching
+      result = {
+        categorized_failures: categorized,
+        meta_failures: meta_failures,
+        test_details: test_summary,
+        total_failed_jobs: failed_jobs.size,
+        in_progress_jobs: in_progress_jobs.size,
+        passed_jobs: passed_jobs.size,
+        auto_restarted: auto_restarted,
+        download_errors: download_errors
+      }
+
+      save_cached_analysis(pr_number, cache_dir, pr, result)
+      result
+    end
+
     private
+
+    def serialize_failures_for_json(failures)
+      return nil if failures.nil?
+      return {} if failures.is_a?(Hash) && failures.empty?
+
+      if failures.is_a?(Hash)
+        failures.transform_values { |f| f.map(&:to_h) }
+      elsif failures.is_a?(Array)
+        failures.map(&:to_h)
+      else
+        failures
+      end
+    end
 
     def cache_path(pr_number, cache_dir)
       File.join(cache_dir, pr_number.to_s, "analysis.json")
@@ -138,6 +263,9 @@ module Bells
         end
       end
 
+      # Download errors are not cached (they're transient)
+      cached[:download_errors] ||= []
+
       cached
     rescue => e
       warn "Failed to load cache for PR #{pr_number}: #{e.message}"
@@ -159,6 +287,9 @@ module Bells
       serialized[:meta_failures] = result[:meta_failures].dup if result[:meta_failures]
       serialized[:head_sha] = pr.head.sha
       serialized[:cached_at] = Time.now.iso8601
+
+      # Don't cache download_errors (they're transient/retriable)
+      serialized.delete(:download_errors)
 
       # Convert JobFailure structs to hashes
       if serialized[:categorized_failures]

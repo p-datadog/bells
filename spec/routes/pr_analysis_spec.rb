@@ -111,7 +111,11 @@ RSpec.describe "PR Analysis Routes" do
 
   describe "GET /pr/:number" do
     let(:mock_client) { instance_double(Bells::GitHubClient) }
-    let(:mock_pr) { OpenStruct.new(title: "Test PR Title", head: OpenStruct.new(sha: "abc123")) }
+    let(:mock_pr) { OpenStruct.new(
+      title: "Test PR Title",
+      user: OpenStruct.new(login: "testuser"),
+      head: OpenStruct.new(sha: "abc123")
+    ) }
     let(:mock_job_failure) do
       Bells::FailureCategorizer::JobFailure.new(
         job_name: "steep/typecheck",
@@ -178,6 +182,7 @@ RSpec.describe "PR Analysis Routes" do
         test_details: { total_failures: 0, unique_tests: 0, flaky_tests: 0, aggregated: [] },
         total_failed_jobs: 0,
         in_progress_jobs: 0,
+        passed_jobs: 5,
         auto_restarted: false,
         download_errors: ["Failed to download artifact junit-test: HTTP 404", "Failed to download artifact results: empty response"]
       )
