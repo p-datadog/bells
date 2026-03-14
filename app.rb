@@ -20,12 +20,21 @@ PR_CACHE = Bells::PrCache.new
 # No need to create a separate constant here since GitHubClient has ETAG_CACHE
 
 # Background refresher to keep cache warm
-BACKGROUND_REFRESHER = Bells::BackgroundRefresher.new(PR_CACHE, interval: 120)
+DEFAULT_AUTHOR = ENV["BELLS_DEFAULT_AUTHOR"]
+BACKGROUND_REFRESHER = Bells::BackgroundRefresher.new(
+  PR_CACHE,
+  interval: 120,
+  default_author: DEFAULT_AUTHOR
+)
 
 configure :development, :production do
   # Start background refresh on server start
   BACKGROUND_REFRESHER.start
-  puts "Started background PR cache refresher (interval: 2 minutes)"
+  if DEFAULT_AUTHOR
+    puts "Started background PR cache refresher (interval: 2 minutes, pre-warming PRs for #{DEFAULT_AUTHOR})"
+  else
+    puts "Started background PR cache refresher (interval: 2 minutes)"
+  end
 end
 
 configure :test do

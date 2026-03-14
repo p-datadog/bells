@@ -41,7 +41,10 @@ Analyze CI failures in dd-trace-rb pull requests, grouped by category.
 When "all-jobs-are-green" is the only failing job, it's automatically restarted in the background. This meta-check often fails due to race conditions when it runs before other jobs complete. A notice is displayed on the PR analysis page when auto-restart occurs.
 
 **Configuration:**
-- `BELLS_DEFAULT_AUTHOR` - Optional environment variable to filter PRs by a specific author by default. When set, the home page shows only that author's PRs, with an "All PRs" link to view all.
+- `BELLS_DEFAULT_AUTHOR` - Optional environment variable to filter PRs by a specific author by default. When set:
+  - Home page shows only that author's PRs (with "All PRs" link to view all)
+  - Background refresher pre-warms full PR analysis for all PRs by that author
+  - Makes PR detail pages instant for the author's PRs (artifacts, logs, test details cached)
 
 **Security:**
 - XSS protection via automatic HTML escaping (erubi)
@@ -90,7 +93,11 @@ Comprehensive caching and optimization reducing PR detail page load time by 70% 
 **Components:**
 - `Bells::ETagCache` - Thread-safe ETag storage for conditional HTTP requests
 - `Bells::PrCache` - LRU in-memory cache with TTL expiration and probabilistic cleanup
-- `Bells::BackgroundRefresher` - Async task warming PR list cache every 2 minutes with exponential backoff on failures
+- `Bells::BackgroundRefresher` - Async task that:
+  - Warms PR list cache every 2 minutes
+  - Pre-warms full PR analysis for default author's PRs (if `BELLS_DEFAULT_AUTHOR` set)
+  - Downloads artifacts, job logs, and test details in background
+  - Uses exponential backoff on failures
 
 **Cache Invalidation:**
 - Analysis cache: 5-minute TTL, invalidated on HEAD SHA change

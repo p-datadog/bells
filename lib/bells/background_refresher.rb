@@ -4,9 +4,10 @@ module Bells
   class BackgroundRefresher
     SHUTDOWN_CHECK_INTERVAL = 10 # seconds
 
-    def initialize(cache, interval: 120)
+    def initialize(cache, interval: 120, default_author: nil)
       @cache = cache
       @interval = interval
+      @default_author = default_author
       @running = false
       @thread = nil
       @consecutive_failures = 0
@@ -83,6 +84,31 @@ module Bells
       @cache.set("pr_list", { prs: prs, ci_statuses: ci_statuses }, ttl: @interval * 2)
 
       puts "[#{Time.now}] Background refresh: Complete (#{prs.size} PRs, #{ci_statuses.size} statuses)"
+
+      # Pre-warm PR analysis for default author's PRs
+      if @default_author
+        author_prs = prs.select { |pr| pr.user.login == @default_author }
+
+        if author_prs.any?
+          puts "[#{Time.now}] Background refresh: Pre-warming #{author_prs.size} PRs for author #{@default_author}..."
+
+          author_prs.each do |pr|
+            warm_pr_analysis(pr.number, pr)
+          end
+
+          puts "[#{Time.now}] Background refresh: Pre-warming complete for #{@default_author}"
+        end
+      end
+    end
+
+    def warm_pr_analysis(pr_number, pr)
+      # Run full analysis to pre-populate cache
+      # Errors are caught and logged, but don't fail the entire refresh
+      Bells.analyze_pr(pr_number, pr: pr)
+      puts "[#{Time.now}]   ✓ Warmed PR ##{pr_number}"
+    rescue => e
+      warn "[#{Time.now}]   ✗ Failed to warm PR ##{pr_number}: #{e.message}"
+      # Don't raise - continue with other PRs
     end
   end
 end
