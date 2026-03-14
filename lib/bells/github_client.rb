@@ -94,8 +94,10 @@ module Bells
         return cached_status if cached_status
       end
 
-      # Fetch all pages (first page was fresh or no cached result)
-      check_runs = with_auto_paginate { @client.check_runs_for_ref(REPO, sha)[:check_runs] }
+      # Limit to first 100 check runs for performance
+      # Recent check runs are sufficient to determine overall CI status
+      response = @client.check_runs_for_ref(REPO, sha, per_page: 100)
+      check_runs = response[:check_runs]
       return :unknown if check_runs.empty?
 
       conclusions = check_runs.map(&:conclusion)

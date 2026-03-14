@@ -83,8 +83,15 @@ get "/pr/:number" do
   @pr_author = pr.user.login
   @pr_head_sha = pr.head.sha
 
-  @ci_status = client.ci_status(@pr_head_sha)
-  puts "[MAIN ROUTE TIMING] #{((Time.now - start_time) * 1000).to_i}ms - CI status fetched (#{@ci_status})"
+  # Try to use cached CI status from homepage (background refresh)
+  pr_data = PR_CACHE.fetch("pr_list") { nil }
+  @ci_status = if pr_data && pr_data[:ci_statuses] && pr_data[:ci_statuses][@pr_number]
+    pr_data[:ci_statuses][@pr_number]
+  else
+    # Fallback: compute CI status (limited to 100 check runs)
+    client.ci_status(@pr_head_sha)
+  end
+  puts "[MAIN ROUTE TIMING] #{((Time.now - start_time) * 1000).to_i}ms - CI status retrieved (#{@ci_status}, from #{pr_data ? 'cache' : 'API'})"
 
   # Use streaming in development/production, not in tests
   @use_streaming = settings.environment != :test
