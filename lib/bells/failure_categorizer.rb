@@ -8,7 +8,7 @@ module Bells
       [:type_check, /steep|typecheck|type.?check|rbs/i],
       [:lint, %r{lint|rubocop|standard/|actionlint|yaml-lint|semgrep|zizmor}i],
       [:security, /codeql|security|semgrep/i],
-      [:tests, %r{test|spec|build & test|parametric|end-to-end|junit|batch}i],
+      [:tests, %r{test|spec|build & test|parametric|end-to-end|junit|batch|validate[\w_]*config}i],
       [:build, /\bbuild\b|compile|bundle/i]
     ].freeze
 
@@ -106,6 +106,24 @@ module Bells
 
     def categorize_jobs(jobs, github_client: nil)
       jobs.map { |job| categorize_job(job, github_client: github_client) }
+    end
+
+    # Categorize commit statuses (GitLab CI)
+    def categorize_status(status)
+      name = status.context
+      category = detect_category(name)
+
+      JobFailure.new(
+        job_name: name,
+        job_id: nil, # Statuses don't have job IDs
+        category: category,
+        url: status.target_url,
+        details: status.description
+      )
+    end
+
+    def categorize_statuses(statuses)
+      statuses.map { |status| categorize_status(status) }
     end
 
     def group_by_category(job_failures)

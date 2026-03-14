@@ -21,6 +21,8 @@ RSpec.describe Bells do
       allow(mock_client).to receive(:check_runs_for_pr).and_return([])
       allow(mock_client).to receive(:failed_jobs_for_pr).and_return([])
       allow(mock_client).to receive(:in_progress_jobs_for_pr).and_return([])
+      allow(mock_client).to receive(:failed_statuses_for_pr).and_return([])
+      allow(mock_client).to receive(:passed_statuses_for_pr).and_return([])
       allow(mock_client).to receive(:download_junit_artifacts).and_return({
         artifact_dirs: [],
         errors: []
@@ -34,6 +36,9 @@ RSpec.describe Bells do
         flaky_tests: 0,
         aggregated: []
       )
+
+      # Default mocking for categorize_statuses (returns empty array)
+      allow(mock_categorizer).to receive(:categorize_statuses).and_return([])
 
       # Clean up cache files
       FileUtils.rm_rf("tmp/test_cache")

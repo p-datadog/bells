@@ -107,12 +107,20 @@ module Bells
       workflow_runs_for_pr(pr_number, pr: pr).select { |run| run.conclusion == "failure" }
     end
 
-    def check_runs_for_pr(pr_number, pr: nil, limit: 100)
+    def check_runs_for_pr(pr_number, pr: nil)
       pr ||= @client.pull_request(REPO, pr_number)
-      # Limit to most recent check runs for performance
-      # Don't use auto_paginate - just get first page
-      response = @client.check_runs_for_ref(REPO, pr.head.sha, per_page: limit)
-      response[:check_runs]
+
+      # Fetch all check runs with filter='latest' to get only the most recent run of each job
+      # This excludes re-runs and gives us the same count as GitHub's UI
+      all_runs = []
+      page = 1
+      loop do
+        response = @client.check_runs_for_ref(REPO, pr.head.sha, per_page: 100, page: page, filter: 'latest')
+        all_runs.concat(response[:check_runs])
+        break if response[:check_runs].size < 100
+        page += 1
+      end
+      all_runs
     end
 
     def failed_jobs_for_pr(pr_number, pr: nil, check_runs: nil)
@@ -123,6 +131,38 @@ module Bells
     def in_progress_jobs_for_pr(pr_number, pr: nil, check_runs: nil)
       check_runs ||= check_runs_for_pr(pr_number, pr: pr)
       check_runs.select { |run| run.status != "completed" }
+    end
+
+    # Fetch commit statuses (GitLab CI that reports via GitHub status API)
+    # Returns the latest status for each unique context
+    def commit_statuses_for_pr(pr_number, pr: nil)
+      pr ||= pull_request(pr_number)
+      sha = pr.head.sha
+
+      # Temporarily enable auto_paginate to fetch all statuses
+      old_auto_paginate = @client.auto_paginate
+      @client.auto_paginate = true
+
+      # Fetch all statuses (paginated automatically)
+      # Note: statuses API returns statuses in reverse chronological order,
+      # so the first occurrence of each context is the latest
+      all_statuses = @client.statuses(REPO, sha)
+
+      # Group by context and take the first (latest) status for each
+      by_context = all_statuses.group_by(&:context)
+      by_context.values.map(&:first)
+    ensure
+      @client.auto_paginate = old_auto_paginate if old_auto_paginate != nil
+    end
+
+    def failed_statuses_for_pr(pr_number, pr: nil)
+      statuses = commit_statuses_for_pr(pr_number, pr: pr)
+      statuses.select { |status| status.state == "failure" || status.state == "error" }
+    end
+
+    def passed_statuses_for_pr(pr_number, pr: nil)
+      statuses = commit_statuses_for_pr(pr_number, pr: pr)
+      statuses.select { |status| status.state == "success" }
     end
 
     def job_logs(job_id, cache_dir: ".cache")

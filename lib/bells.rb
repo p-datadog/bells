@@ -44,8 +44,10 @@ module Bells
     def analyze_pr(pr_number, cache_dir: ".cache", pr: nil)
       client = GitHubClient.new
 
-      # Fetch PR once if not provided - check cache first (background refresh populates this)
-      pr ||= PR_CACHE.fetch("pr:#{pr_number}") do
+      # Fetch PR once if not provided - check cache first if available (background refresh populates this)
+      pr ||= if defined?(PR_CACHE)
+        PR_CACHE.fetch("pr:#{pr_number}") { client.pull_request(pr_number) }
+      else
         client.pull_request(pr_number)
       end
 
@@ -62,12 +64,21 @@ module Bells
       failed_jobs = client.failed_jobs_for_pr(pr_number, pr: pr, check_runs: check_runs)
       in_progress_jobs = client.in_progress_jobs_for_pr(pr_number, pr: pr, check_runs: check_runs)
       passed_jobs = check_runs.select { |run| run.conclusion == "success" }
-      job_failures = categorizer.categorize_jobs(failed_jobs, github_client: client)
-      categorized = categorizer.group_by_category(job_failures)
 
-      # Auto-restart meta-check job if it's the only failure
+      # Also fetch commit statuses (GitLab CI)
+      failed_statuses = client.failed_statuses_for_pr(pr_number, pr: pr)
+      passed_statuses = client.passed_statuses_for_pr(pr_number, pr: pr)
+
+      # Categorize both check runs and commit statuses
+      job_failures = categorizer.categorize_jobs(failed_jobs, github_client: client)
+      status_failures = categorizer.categorize_statuses(failed_statuses)
+
+      # Merge failures from both sources
+      categorized = categorizer.group_by_category(job_failures + status_failures)
+
+      # Auto-restart meta-check job if it's the only GitHub Actions failure and no GitLab failures
       auto_restarted = false
-      if failed_jobs.size == 1 && failed_jobs.first.name == META_CHECK_JOB_NAME
+      if failed_jobs.size == 1 && failed_jobs.first.name == META_CHECK_JOB_NAME && failed_statuses.empty?
         job_id = failed_jobs.first.id
         Thread.new do
           puts "Auto-restarting #{META_CHECK_JOB_NAME} job #{job_id} for PR #{pr_number}"
@@ -112,9 +123,9 @@ module Bells
         categorized_failures: categorized,
         meta_failures: meta_failures,
         test_details: test_summary,
-        total_failed_jobs: failed_jobs.size,
+        total_failed_jobs: failed_jobs.size + failed_statuses.size,
         in_progress_jobs: in_progress_jobs.size,
-        passed_jobs: passed_jobs.size,
+        passed_jobs: passed_jobs.size + passed_statuses.size,
         auto_restarted: auto_restarted,
         download_errors: download_errors
       }
@@ -152,7 +163,7 @@ module Bells
       pr ||= PR_CACHE.fetch("pr:#{pr_number}") do
         client.pull_request(pr_number)
       end
-      cache_source = PR_CACHE.fetch("pr:#{pr_number}") { nil } ? "cache" : "API"
+      cache_source = (defined?(PR_CACHE) && PR_CACHE.fetch("pr:#{pr_number}") { nil }) ? "cache" : "API"
       log_timing.call("PR fetched (from #{cache_source})")
 
       # Check cache first - if cached, send all events immediately
@@ -196,14 +207,18 @@ module Bells
       failed_jobs = client.failed_jobs_for_pr(pr_number, pr: pr, check_runs: check_runs)
       in_progress_jobs = client.in_progress_jobs_for_pr(pr_number, pr: pr, check_runs: check_runs)
       passed_jobs = check_runs.select { |run| run.conclusion == "success" }
-      log_timing.call("Jobs filtered (#{failed_jobs.size} failed, #{in_progress_jobs.size} in progress, #{passed_jobs.size} passed)")
+
+      # Also fetch commit statuses (GitLab CI)
+      failed_statuses = client.failed_statuses_for_pr(pr_number, pr: pr)
+      passed_statuses = client.passed_statuses_for_pr(pr_number, pr: pr)
+      log_timing.call("Jobs filtered (#{failed_jobs.size} failed, #{in_progress_jobs.size} in progress, #{passed_jobs.size} passed) + #{failed_statuses.size} failed statuses + #{passed_statuses.size} passed statuses")
 
       # Send job list event
       yield(:job_list, {
-        failed_jobs: failed_jobs.size,
+        failed_jobs: failed_jobs.size + failed_statuses.size,
         in_progress: in_progress_jobs.size,
-        passed_jobs: passed_jobs.size,
-        failed_job_names: failed_jobs.map(&:name)
+        passed_jobs: passed_jobs.size + passed_statuses.size,
+        failed_job_names: failed_jobs.map(&:name) + failed_statuses.map(&:context)
       })
 
       log_timing.call("EVENT 1: job_list sent")
@@ -211,7 +226,8 @@ module Bells
       # Phase 1: Send initial categorization WITHOUT infrastructure detection
       # This is fast (name-based only, no log downloads)
       initial_job_failures = categorizer.categorize_jobs(failed_jobs, github_client: nil)
-      initial_categorized = categorizer.group_by_category(initial_job_failures)
+      initial_status_failures = categorizer.categorize_statuses(failed_statuses)
+      initial_categorized = categorizer.group_by_category(initial_job_failures + initial_status_failures)
       log_timing.call("Initial categorization complete (name-based, no logs)")
 
       yield(:categorized_failures_initial, {
@@ -230,12 +246,14 @@ module Bells
       job_failures = threads.map(&:value)
       log_timing.call("Parallel log downloads complete")
 
-      categorized = categorizer.group_by_category(job_failures)
+      # Combine check run failures and status failures
+      status_failures = categorizer.categorize_statuses(failed_statuses)
+      categorized = categorizer.group_by_category(job_failures + status_failures)
       log_timing.call("Final categorization complete (with infrastructure detection)")
 
-      # Auto-restart meta-check job if it's the only failure
+      # Auto-restart meta-check job if it's the only GitHub Actions failure and no GitLab failures
       auto_restarted = false
-      if failed_jobs.size == 1 && failed_jobs.first.name == META_CHECK_JOB_NAME
+      if failed_jobs.size == 1 && failed_jobs.first.name == META_CHECK_JOB_NAME && failed_statuses.empty?
         job_id = failed_jobs.first.id
         Thread.new do
           puts "Auto-restarting #{META_CHECK_JOB_NAME} job #{job_id} for PR #{pr_number}"
@@ -278,7 +296,7 @@ module Bells
           test_details: { total_failures: 0, unique_tests: 0, flaky_tests: 0, aggregated: [] },
           total_failed_jobs: 0,
           in_progress_jobs: in_progress_jobs.size,
-          passed_jobs: passed_jobs.size,
+          passed_jobs: passed_jobs.size + passed_statuses.size,
           auto_restarted: auto_restarted,
           download_errors: []
         }
@@ -328,9 +346,9 @@ module Bells
         categorized_failures: categorized,
         meta_failures: meta_failures,
         test_details: test_summary,
-        total_failed_jobs: failed_jobs.size,
+        total_failed_jobs: failed_jobs.size + failed_statuses.size,
         in_progress_jobs: in_progress_jobs.size,
-        passed_jobs: passed_jobs.size,
+        passed_jobs: passed_jobs.size + passed_statuses.size,
         auto_restarted: auto_restarted,
         download_errors: download_errors
       }
