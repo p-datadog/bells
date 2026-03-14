@@ -27,10 +27,11 @@ module Bells
       aggregator = FailureAggregator.new
       categorizer = FailureCategorizer.new
 
-      # Fetch check runs once and filter for failed/in-progress jobs
+      # Fetch check runs once and filter for failed/in-progress/passed jobs
       check_runs = client.check_runs_for_pr(pr_number, pr: pr)
       failed_jobs = client.failed_jobs_for_pr(pr_number, pr: pr, check_runs: check_runs)
       in_progress_jobs = client.in_progress_jobs_for_pr(pr_number, pr: pr, check_runs: check_runs)
+      passed_jobs = check_runs.select { |run| run.conclusion == "success" }
       job_failures = categorizer.categorize_jobs(failed_jobs, github_client: client)
       categorized = categorizer.group_by_category(job_failures)
 
@@ -83,6 +84,7 @@ module Bells
         test_details: test_summary,
         total_failed_jobs: failed_jobs.size,
         in_progress_jobs: in_progress_jobs.size,
+        passed_jobs: passed_jobs.size,
         auto_restarted: auto_restarted,
         download_errors: download_errors
       }

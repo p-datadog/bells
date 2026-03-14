@@ -79,6 +79,7 @@ RSpec.describe "XSS Protection" do
         test_details: { total_failures: 0, unique_tests: 0, flaky_tests: 0, aggregated: [] },
         total_failed_jobs: 1,
         in_progress_jobs: 0,
+        passed_jobs: 5,
         auto_restarted: false,
         download_errors: []
       )

@@ -87,6 +87,7 @@ RSpec.describe Bells do
 
         expect(result[:auto_restarted]).to eq(true)
         expect(result[:total_failed_jobs]).to eq(1)
+        expect(result[:passed_jobs]).to eq(1)
 
         # Give the background thread time to execute
         sleep 0.1

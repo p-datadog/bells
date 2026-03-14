@@ -86,7 +86,9 @@ get "/api/pr/:number" do
 
   {
     pr_number: pr_number,
+    passed_jobs: results[:passed_jobs],
     total_failed_jobs: results[:total_failed_jobs],
+    in_progress_jobs: results[:in_progress_jobs],
     auto_restarted: results[:auto_restarted],
     categorized_failures: results[:categorized_failures].transform_values do |failures|
       failures.map { |f| { job_name: f.job_name, job_id: f.job_id, url: f.url } }

@@ -132,6 +132,7 @@ RSpec.describe "PR Analysis Routes" do
         test_details: { total_failures: 0, unique_tests: 0, flaky_tests: 0, aggregated: [] },
         total_failed_jobs: 1,
         in_progress_jobs: 0,
+        passed_jobs: 5,
         auto_restarted: false,
         download_errors: []
       )
@@ -144,7 +145,8 @@ RSpec.describe "PR Analysis Routes" do
       expect(last_response.body).to include("PR #123")
       expect(last_response.body).to include("Test PR Title")
       expect(last_response.body).to include("Failed")
-      expect(last_response.body).to include("failed jobs")
+      expect(last_response.body).to include("passed")
+      expect(last_response.body).to include("failed")
       expect(last_response.body).to include("Type Check")
       expect(last_response.body).to include("steep/typecheck")
     end
@@ -209,6 +211,7 @@ RSpec.describe "PR Analysis Routes" do
         test_details: { total_failures: 2, unique_tests: 2, flaky_tests: 0, aggregated: [] },
         total_failed_jobs: 1,
         in_progress_jobs: 0,
+        passed_jobs: 5,
         auto_restarted: false,
         download_errors: []
       )
