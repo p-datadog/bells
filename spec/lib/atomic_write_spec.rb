@@ -37,14 +37,16 @@ RSpec.describe "Bells.atomic_write" do
     expect(File.read(nested_file)).to eq("content")
   end
 
-  it "cleans up .part file on success" do
+  it "cleans up .part.* file on success" do
     Bells.atomic_write(test_file, "content")
 
     expect(File.exist?(test_file)).to be true
-    expect(File.exist?("#{test_file}.part")).to be false
+    # Check no .part.* files remain
+    part_files = Dir.glob("#{test_file}.part.*")
+    expect(part_files).to be_empty
   end
 
-  it "cleans up .part file on failure" do
+  it "cleans up .part.* file on failure" do
     # Force failure by making parent directory read-only
     FileUtils.mkdir_p(temp_dir)
     FileUtils.chmod(0444, temp_dir)
@@ -53,7 +55,9 @@ RSpec.describe "Bells.atomic_write" do
       Bells.atomic_write(test_file, "content")
     }.to raise_error
 
-    expect(File.exist?("#{test_file}.part")).to be false
+    # Check no .part.* files remain
+    part_files = Dir.glob("#{test_file}.part.*")
+    expect(part_files).to be_empty
   ensure
     FileUtils.chmod(0755, temp_dir)
   end

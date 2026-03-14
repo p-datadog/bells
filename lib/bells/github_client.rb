@@ -239,14 +239,10 @@ module Bells
         return nil
       end
 
-      # Use atomic write to prevent corruption from concurrent downloads
-      Bells.atomic_write(zip_path, response.body, binary: true)
-
-      unless File.exist?(zip_path)
-        error_msg = "Failed to write artifact #{artifact.name}: zip file not created"
-        warn error_msg
-        @download_errors << error_msg if @download_errors
-        return nil
+      # Use atomic write with validation to prevent corruption from concurrent downloads
+      # Validate zip integrity before renaming from .part to .zip
+      Bells.atomic_write(zip_path, response.body, binary: true) do |temp_path|
+        valid_zip?(temp_path)
       end
 
       extract_zip(zip_path, artifact_path)
@@ -259,6 +255,19 @@ module Bells
       @download_errors << error_msg if @download_errors
       FileUtils.rm_f(zip_path) if zip_path
       nil
+    end
+
+    def valid_zip?(zip_path)
+      # Try to open the zip file to verify it's valid
+      # Don't extract, just verify structure
+      Zip::File.open(zip_path) do |zip|
+        # If we can open it and iterate entries, it's valid
+        zip.count
+      end
+      true
+    rescue Zip::Error, Errno::EINVAL => e
+      # Zip is corrupted or invalid
+      false
     end
 
     def extract_zip(zip_path, dest_dir)

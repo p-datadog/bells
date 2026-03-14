@@ -13,15 +13,25 @@ module Bells
   CACHE_TTL = 300 # 5 minutes
 
   # Atomic file write helper to prevent corruption from concurrent writes
-  # Writes to a temporary .part file then renames atomically
-  def self.atomic_write(path, content, binary: false)
-    temp_path = "#{path}.part"
+  # Writes to a temporary file with unique suffix then renames atomically
+  # Optional validate block: called with temp_path before rename, should return true if valid
+  def self.atomic_write(path, content, binary: false, &validate)
+    # Use unique suffix to prevent conflicts from concurrent writes
+    temp_path = "#{path}.part.#{Process.pid}.#{Thread.current.object_id}"
     FileUtils.mkdir_p(File.dirname(path))
 
     if binary
       File.binwrite(temp_path, content)
     else
       File.write(temp_path, content)
+    end
+
+    # Validate before renaming if block provided
+    if validate
+      unless validate.call(temp_path)
+        File.delete(temp_path)
+        raise "Validation failed for #{path}"
+      end
     end
 
     File.rename(temp_path, path)
