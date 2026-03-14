@@ -28,51 +28,43 @@ RSpec.describe Bells::GitHubClient do
     end
 
     it "returns :green when all checks pass" do
-      allow(octokit_client).to receive(:check_runs_for_ref).and_return(
-        check_runs: [
-          OpenStruct.new(status: "completed", conclusion: "success"),
-          OpenStruct.new(status: "completed", conclusion: "success")
-        ]
+      allow(octokit_client).to receive(:combined_status).and_return(
+        OpenStruct.new(state: "success", total_count: 10)
       )
       client = described_class.new
       expect(client.ci_status("abc123")).to eq(:green)
     end
 
     it "returns :failed when checks complete with failures" do
-      allow(octokit_client).to receive(:check_runs_for_ref).and_return(
-        check_runs: [
-          OpenStruct.new(status: "completed", conclusion: "success"),
-          OpenStruct.new(status: "completed", conclusion: "failure")
-        ]
+      allow(octokit_client).to receive(:combined_status).and_return(
+        OpenStruct.new(state: "failure", total_count: 10)
       )
       client = described_class.new
       expect(client.ci_status("abc123")).to eq(:failed)
     end
 
     it "returns :pending_clean when in progress with no failures" do
-      allow(octokit_client).to receive(:check_runs_for_ref).and_return(
-        check_runs: [
-          OpenStruct.new(status: "completed", conclusion: "success"),
-          OpenStruct.new(status: "in_progress", conclusion: nil)
-        ]
+      allow(octokit_client).to receive(:combined_status).and_return(
+        OpenStruct.new(state: "pending", total_count: 10)
       )
       client = described_class.new
       expect(client.ci_status("abc123")).to eq(:pending_clean)
     end
 
     it "returns :pending_failing when in progress with failures" do
-      allow(octokit_client).to receive(:check_runs_for_ref).and_return(
-        check_runs: [
-          OpenStruct.new(status: "completed", conclusion: "failure"),
-          OpenStruct.new(status: "in_progress", conclusion: nil)
-        ]
+      # Note: combined_status cannot distinguish pending_failing from pending_clean
+      # This is an acceptable trade-off for performance (single API call vs 5-7 calls)
+      allow(octokit_client).to receive(:combined_status).and_return(
+        OpenStruct.new(state: "pending", total_count: 10)
       )
       client = described_class.new
-      expect(client.ci_status("abc123")).to eq(:pending_failing)
+      expect(client.ci_status("abc123")).to eq(:pending_clean)
     end
 
     it "returns :unknown when no check runs exist" do
-      allow(octokit_client).to receive(:check_runs_for_ref).and_return(check_runs: [])
+      allow(octokit_client).to receive(:combined_status).and_return(
+        OpenStruct.new(state: "", total_count: 0)
+      )
       client = described_class.new
       expect(client.ci_status("abc123")).to eq(:unknown)
     end

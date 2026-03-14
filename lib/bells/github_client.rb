@@ -64,60 +64,35 @@ module Bells
     end
 
     def ci_status(sha)
-      # Use ETag for first page as freshness indicator
-      # If first page returns 304, skip fetching - data likely unchanged
-      # If first page returns 200, fetch all pages
-      first_page_fresh = fetch_with_etag("check_runs:#{sha}:page1") do |cached_etag|
-        options = { per_page: 100 }
+      # Use combined_status API - single call returns rollup state
+      fetch_with_etag("combined_status:#{sha}") do |cached_etag|
+        options = {}
         options[:headers] = { "If-None-Match" => cached_etag } if cached_etag
 
-        response = @client.check_runs_for_ref(REPO, sha, **options)
+        response = @client.combined_status(REPO, sha, **options)
 
         # Check if response was 304 Not Modified
         last_response = @client.last_response
         if last_response && last_response.status == 304
-          # 304 - first page unchanged, likely rest unchanged too
+          # Data not modified, return cached indicator
           { data: nil, etag: cached_etag, not_modified: true }
         else
-          # New data received
+          # Convert GitHub state to our status symbols
+          status = case response.state
+          when "success"
+            :green
+          when "pending", "queued", "in_progress"
+            :pending_clean  # Simplified - can't distinguish pending_failing without check runs
+          when "failure", "error"
+            :failed
+          else
+            :unknown
+          end
+
           etag = last_response&.headers&.[]("etag")
-          { data: response, etag: etag, not_modified: false }
+          { data: status, etag: etag, not_modified: false }
         end
       end
-
-      # If first page returned 304, return cached result if available
-      if first_page_fresh.nil?
-        cached_status = @etag_cache.fetch("ci_status_result:#{sha}") do |_|
-          # No cached result, need to fetch
-          { data: nil, etag: nil, not_modified: false }
-        end
-        return cached_status if cached_status
-      end
-
-      # Limit to first 100 check runs for performance
-      # Recent check runs are sufficient to determine overall CI status
-      response = @client.check_runs_for_ref(REPO, sha, per_page: 100)
-      check_runs = response[:check_runs]
-      return :unknown if check_runs.empty?
-
-      conclusions = check_runs.map(&:conclusion)
-      statuses = check_runs.map(&:status)
-
-      has_failures = conclusions.include?("failure")
-      all_complete = statuses.all? { |s| s == "completed" }
-
-      result = if all_complete
-        has_failures ? :failed : :green
-      else
-        has_failures ? :pending_failing : :pending_clean
-      end
-
-      # Cache the computed result
-      @etag_cache.fetch("ci_status_result:#{sha}") do |_|
-        { data: result, etag: nil, not_modified: false }
-      end
-
-      result
     end
 
     def workflow_runs_for_pr(pr_number, pr: nil)
