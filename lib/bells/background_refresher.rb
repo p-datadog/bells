@@ -24,25 +24,44 @@ module Bells
       @thread = Thread.new do
         Thread.current.name = "pr-cache-refresher"
 
+        # Run first refresh immediately
+        begin
+          refresh_pr_cache
+          @consecutive_failures = 0
+        rescue => e
+          warn "Background refresh error: #{e.message}"
+          @consecutive_failures += 1
+        end
+
+        # Then loop: sleep → refresh
         loop do
           break unless @running
 
-          sleep_interval = begin
-            refresh_pr_cache
-            @consecutive_failures = 0
-            @interval
-          rescue => e
-            warn "Background refresh error: #{e.message}"
-            @consecutive_failures += 1
+          # Calculate sleep interval (use backoff if previous refresh failed)
+          sleep_interval = if @consecutive_failures > 0
             backoff = [@interval * (2 ** [@consecutive_failures - 1, 3].min), @max_backoff].min
-            warn "Backing off for #{backoff}s due to #{@consecutive_failures} consecutive failures"
             backoff
+          else
+            @interval
           end
 
           # Sleep in small increments to allow quick shutdown
           (sleep_interval / SHUTDOWN_CHECK_INTERVAL).times do
             break unless @running
             sleep SHUTDOWN_CHECK_INTERVAL
+          end
+
+          break unless @running
+
+          # Refresh
+          begin
+            refresh_pr_cache
+            @consecutive_failures = 0
+          rescue => e
+            warn "Background refresh error: #{e.message}"
+            @consecutive_failures += 1
+            backoff = [@interval * (2 ** [@consecutive_failures - 1, 3].min), @max_backoff].min
+            warn "Backing off for #{backoff}s due to #{@consecutive_failures} consecutive failures"
           end
         end
       end
