@@ -44,10 +44,9 @@ When "all-jobs-are-green" is the only failing job, it's automatically restarted 
 **Configuration:**
 - `BELLS_DEFAULT_AUTHOR` - Optional environment variable to filter PRs by a specific author by default. When set:
   - Home page shows only that author's PRs (with "All PRs" link to view all)
-  - Background refresher pre-warms full PR analysis for all PRs by that author (if warming enabled)
+  - Background refresher pre-warms full PR analysis for all PRs by that author
   - Makes PR detail pages instant for the author's PRs (artifacts, logs, test details cached)
-- `BELLS_BACKGROUND_REFRESH` - Set to `"false"` to disable background PR list refresh (default: enabled)
-- `BELLS_BACKGROUND_WARMING` - Set to `"false"` to disable background PR analysis warming (default: enabled). Only applies when `BELLS_DEFAULT_AUTHOR` is set
+- `BELLS_BACKGROUND_REFRESH` - Set to `"false"` to disable all background operations (default: enabled)
 
 **Security:**
 - XSS protection via automatic HTML escaping (erubi)
@@ -61,22 +60,21 @@ When "all-jobs-are-green" is the only failing job, it's automatically restarted 
 # Using bin/bells wrapper (recommended)
 bin/bells                        # Default: background refresh enabled
 bin/bells -a alice               # Filter by author + pre-warm their PRs
-bin/bells -b                     # Disable all background operations
+bin/bells -b                     # Disable background operations
+bin/bells -a alice -b            # Filter by author, no background
 
-# Long options (equivalent)
-bin/bells --author alice
-bin/bells --no-background
+# Long options
+bin/bells --author alice --no-background
 
 # Direct puma usage
-bundle exec puma                 # Default
+bundle exec puma
 
 # Development (auto-reload on file changes)
 bundle exec rerun -- puma
 
-# With environment variables (advanced)
+# Advanced: environment variables
 BELLS_DEFAULT_AUTHOR=alice bundle exec puma
 BELLS_BACKGROUND_REFRESH=false bundle exec puma
-BELLS_BACKGROUND_WARMING=false BELLS_DEFAULT_AUTHOR=alice bundle exec puma
 
 # Visit http://localhost:9292
 ```

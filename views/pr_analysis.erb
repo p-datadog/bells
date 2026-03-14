@@ -16,28 +16,28 @@
 
 <!-- Job Summary -->
 <div id="job-summary-section">
-  <div id="job-summary-loading" class="loading">
+  <div id="job-summary-loading" class="loading" style="display: none;">
     <p>⏳ Loading job status...</p>
   </div>
-  <div id="job-summary-content" style="display: none;"></div>
+  <div id="job-summary-content"></div>
 </div>
 
 <!-- Categorized Failures -->
 <div id="categorized-failures-section">
-  <div id="categorized-loading" class="loading">
+  <div id="categorized-loading" class="loading" style="display: none;">
     <p>⏳ Analyzing failures and categorizing jobs...</p>
     <p><small>Downloading job logs for infrastructure failure detection...</small></p>
   </div>
-  <div id="categorized-content" style="display: none;"></div>
+  <div id="categorized-content"></div>
 </div>
 
 <!-- Test Details -->
 <div id="test-details-section">
-  <div id="test-details-loading" class="loading">
+  <div id="test-details-loading" class="loading" style="display: none;">
     <p>⏳ Downloading and parsing test results...</p>
     <p><small>This may take 10-30 seconds for first visit. Subsequent visits will be instant.</small></p>
   </div>
-  <div id="test-details-content" style="display: none;"></div>
+  <div id="test-details-content"></div>
 </div>
 
 <!-- Meta Failures (populated by SSE if present) -->
@@ -74,9 +74,6 @@
   eventSource.addEventListener('job_list', function(e) {
     const data = JSON.parse(e.data);
 
-    document.getElementById('job-summary-loading').style.display = 'none';
-    document.getElementById('job-summary-content').style.display = 'block';
-
     const html = '<p><strong>' + data.passed_jobs + '</strong> passed, ' +
                  '<strong>' + data.failed_jobs + '</strong> failed' +
                  (data.in_progress > 0 ? ', <strong>' + data.in_progress + '</strong> in progress' : '') +
@@ -87,8 +84,6 @@
 
   eventSource.addEventListener('categorized_failures_initial', function(e) {
     const data = JSON.parse(e.data);
-
-    document.getElementById('categorized-loading').innerHTML = '<p>⏳ Checking for infrastructure failures...</p><p><small>Downloading job logs in parallel...</small></p>';
 
     let html = '';
 
@@ -101,7 +96,6 @@
     }
 
     document.getElementById('categorized-content').innerHTML = html;
-    document.getElementById('categorized-content').style.display = 'block';
   });
 
   eventSource.addEventListener('categorized_failures_final', function(e) {
@@ -115,9 +109,6 @@
       notice.style.borderLeft = '4px solid #ffc107';
       notice.innerHTML = '<p style="margin: 0;">ℹ️ Automatically restarted the "all-jobs-are-green" job. Refresh the page in a moment to see updated status.</p>';
     }
-
-    document.getElementById('categorized-loading').style.display = 'none';
-    document.getElementById('categorized-content').style.display = 'block';
 
     let html = '';
 
@@ -142,13 +133,8 @@
   eventSource.addEventListener('test_details', function(e) {
     const data = JSON.parse(e.data);
 
-    document.getElementById('test-details-loading').style.display = 'none';
-    document.getElementById('test-details-content').style.display = 'block';
-
     if (data.aggregated && data.aggregated.length > 0) {
       document.getElementById('test-details-content').innerHTML = renderTestDetails(data);
-    } else {
-      document.getElementById('test-details-content').innerHTML = '';
     }
   });
 
@@ -160,11 +146,9 @@
   eventSource.addEventListener('error', function(e) {
     console.error('SSE error:', e);
 
-    // Show error in all loading sections
-    const loadingSections = document.querySelectorAll('.loading');
-    loadingSections.forEach(function(section) {
-      section.innerHTML = '<p>❌ Connection lost. <a href="javascript:location.reload()">Refresh page</a></p>';
-    });
+    // Show error message
+    document.getElementById('job-summary-content').innerHTML =
+      '<p>❌ Connection lost. <a href="javascript:location.reload()">Refresh page</a></p>';
 
     // Auto-refresh after 5 seconds
     setTimeout(function() { window.location.reload(); }, 5000);
