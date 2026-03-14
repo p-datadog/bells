@@ -53,13 +53,7 @@ module Bells
       @running = false
 
       if @thread&.alive?
-        puts "Waiting for background refresher to finish..."
-        joined = @thread.join(10)
-
-        unless joined
-          warn "Background refresher did not stop gracefully, forcing shutdown"
-          @thread.kill if @thread&.alive?
-        end
+        @thread.kill
       end
 
       @thread = nil

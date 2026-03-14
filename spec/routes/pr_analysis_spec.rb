@@ -126,7 +126,7 @@ RSpec.describe "PR Analysis Routes" do
       allow(Bells::GitHubClient).to receive(:new).and_return(mock_client)
       allow(mock_client).to receive(:pull_request).with(123).and_return(mock_pr)
       allow(mock_client).to receive(:ci_status).with("abc123").and_return(:failed)
-      allow(Bells).to receive(:analyze_pr).with(123).and_return(
+      allow(Bells).to receive(:analyze_pr).with(123, anything).and_return(
         categorized_failures: { type_check: [mock_job_failure] },
         meta_failures: nil,
         test_details: { total_failures: 0, unique_tests: 0, flaky_tests: 0, aggregated: [] },
@@ -150,7 +150,7 @@ RSpec.describe "PR Analysis Routes" do
     end
 
     it "shows auto-restart notice when job was restarted" do
-      allow(Bells).to receive(:analyze_pr).with(456).and_return(
+      allow(Bells).to receive(:analyze_pr).with(456, anything).and_return(
         categorized_failures: {},
         meta_failures: nil,
         test_details: { total_failures: 0, unique_tests: 0, flaky_tests: 0, aggregated: [] },
@@ -170,7 +170,7 @@ RSpec.describe "PR Analysis Routes" do
     end
 
     it "displays artifact download errors" do
-      allow(Bells).to receive(:analyze_pr).with(789).and_return(
+      allow(Bells).to receive(:analyze_pr).with(789, anything).and_return(
         categorized_failures: {},
         meta_failures: nil,
         test_details: { total_failures: 0, unique_tests: 0, flaky_tests: 0, aggregated: [] },
@@ -203,7 +203,7 @@ RSpec.describe "PR Analysis Routes" do
     end
 
     before do
-      allow(Bells).to receive(:analyze_pr).with(456).and_return(
+      allow(Bells).to receive(:analyze_pr).and_return(
         categorized_failures: { lint: [mock_job_failure] },
         meta_failures: nil,
         test_details: { total_failures: 2, unique_tests: 2, flaky_tests: 0, aggregated: [] },

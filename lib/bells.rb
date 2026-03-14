@@ -13,20 +13,24 @@ module Bells
   CACHE_TTL = 300 # 5 minutes
 
   class << self
-    def analyze_pr(pr_number, cache_dir: ".cache")
+    def analyze_pr(pr_number, cache_dir: ".cache", pr: nil)
       client = GitHubClient.new
 
+      # Fetch PR once if not provided
+      pr ||= client.pull_request(pr_number)
+
       # Check cache first
-      cached = load_cached_analysis(pr_number, cache_dir, client)
+      cached = load_cached_analysis(pr_number, cache_dir, pr)
       return cached if cached
       client = GitHubClient.new
       parser = JunitParser.new
       aggregator = FailureAggregator.new
       categorizer = FailureCategorizer.new
 
-      # Get all failed jobs and categorize them
-      failed_jobs = client.failed_jobs_for_pr(pr_number)
-      in_progress_jobs = client.in_progress_jobs_for_pr(pr_number)
+      # Fetch check runs once and filter for failed/in-progress jobs
+      check_runs = client.check_runs_for_pr(pr_number, pr: pr)
+      failed_jobs = client.failed_jobs_for_pr(pr_number, pr: pr, check_runs: check_runs)
+      in_progress_jobs = client.in_progress_jobs_for_pr(pr_number, pr: pr, check_runs: check_runs)
       job_failures = categorizer.categorize_jobs(failed_jobs, github_client: client)
       categorized = categorizer.group_by_category(job_failures)
 
@@ -50,7 +54,7 @@ module Bells
       end
 
       # Get detailed test failures from JUnit artifacts
-      download_result = client.download_junit_artifacts(pr_number, cache_dir: cache_dir)
+      download_result = client.download_junit_artifacts(pr_number, cache_dir: cache_dir, pr: pr)
       artifact_dirs = download_result[:artifact_dirs]
       download_errors = download_result[:errors]
 
@@ -84,7 +88,7 @@ module Bells
       }
 
       # Save to cache
-      save_cached_analysis(pr_number, cache_dir, client, result)
+      save_cached_analysis(pr_number, cache_dir, pr, result)
 
       result
     end
@@ -95,7 +99,7 @@ module Bells
       File.join(cache_dir, pr_number.to_s, "analysis.json")
     end
 
-    def load_cached_analysis(pr_number, cache_dir, client)
+    def load_cached_analysis(pr_number, cache_dir, pr)
       path = cache_path(pr_number, cache_dir)
       return nil unless File.exist?(path)
 
@@ -105,7 +109,6 @@ module Bells
       return nil if Time.now - Time.parse(cached[:cached_at]) > CACHE_TTL
 
       # Invalidate if PR head SHA changed
-      pr = client.pull_request(pr_number)
       return nil if cached[:head_sha] != pr.head.sha
 
       # Convert JobFailure structs back from hashes
@@ -120,12 +123,14 @@ module Bells
       end
 
       # Convert AggregatedFailure structs back
-      if cached[:test_details][:aggregated]
+      if cached[:test_details] && cached[:test_details][:aggregated]
         cached[:test_details][:aggregated] = cached[:test_details][:aggregated].map do |f|
           # Convert instances back to TestResult structs
           instances = f[:instances].map do |i|
             ctx = i[:build_context] ? JunitParser::BuildContext.new(**i[:build_context]) : nil
-            JunitParser::TestResult.new(**i.merge(build_context: ctx))
+            # Convert status string back to symbol
+            status = i[:status].is_a?(String) ? i[:status].to_sym : i[:status]
+            JunitParser::TestResult.new(**i.merge(build_context: ctx, status: status))
           end
           FailureAggregator::AggregatedFailure.new(**f.merge(instances: instances))
         end
@@ -137,8 +142,7 @@ module Bells
       nil
     end
 
-    def save_cached_analysis(pr_number, cache_dir, client, result)
-      pr = client.pull_request(pr_number)
+    def save_cached_analysis(pr_number, cache_dir, pr, result)
       path = cache_path(pr_number, cache_dir)
       FileUtils.mkdir_p(File.dirname(path))
 

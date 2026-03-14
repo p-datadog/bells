@@ -18,12 +18,16 @@ RSpec.describe Bells do
       allow(Bells::FailureCategorizer).to receive(:new).and_return(mock_categorizer)
 
       allow(mock_client).to receive(:pull_request).and_return(mock_pr)
+      allow(mock_client).to receive(:check_runs_for_pr).and_return([])
+      allow(mock_client).to receive(:failed_jobs_for_pr).and_return([])
+      allow(mock_client).to receive(:in_progress_jobs_for_pr).and_return([])
       allow(mock_client).to receive(:download_junit_artifacts).and_return({
         artifact_dirs: [],
         errors: []
       })
-      allow(mock_client).to receive(:in_progress_jobs_for_pr).and_return([])
       allow(mock_parser).to receive(:parse_directory).and_return([])
+      allow(mock_parser).to receive(:parse_directory_failures_only).and_return([])
+      allow(mock_parser).to receive(:parse_directory_for_tests).and_return([])
       allow(mock_aggregator).to receive(:summary).and_return(
         total_failures: 0,
         unique_tests: 0,
@@ -43,7 +47,9 @@ RSpec.describe Bells do
       let(:meta_job) do
         OpenStruct.new(
           name: Bells::META_CHECK_JOB_NAME,
-          id: 12345
+          id: 12345,
+          status: "completed",
+          conclusion: "failure"
         )
       end
       let(:meta_job_failure) do
@@ -57,7 +63,16 @@ RSpec.describe Bells do
       end
 
       before do
-        allow(mock_client).to receive(:failed_jobs_for_pr).with(123).and_return([meta_job])
+        # Add completed jobs with "success" conclusion to check_runs
+        completed_job = OpenStruct.new(
+          name: "Other Job",
+          id: 99999,
+          status: "completed",
+          conclusion: "success"
+        )
+        # Mock check_runs_for_pr to return all jobs (failed + completed)
+        allow(mock_client).to receive(:check_runs_for_pr).and_return([meta_job, completed_job])
+        allow(mock_client).to receive(:failed_jobs_for_pr).and_return([meta_job])
         allow(mock_categorizer).to receive(:categorize_jobs).and_return([meta_job_failure])
         allow(mock_categorizer).to receive(:group_by_category).and_return({
           meta: [meta_job_failure]
@@ -90,13 +105,17 @@ RSpec.describe Bells do
       let(:meta_job) do
         OpenStruct.new(
           name: Bells::META_CHECK_JOB_NAME,
-          id: 12345
+          id: 12345,
+          status: "completed",
+          conclusion: "failure"
         )
       end
       let(:other_job) do
         OpenStruct.new(
           name: "rubocop/lint",
-          id: 67890
+          id: 67890,
+          status: "completed",
+          conclusion: "failure"
         )
       end
       let(:meta_job_failure) do
@@ -119,7 +138,8 @@ RSpec.describe Bells do
       end
 
       before do
-        allow(mock_client).to receive(:failed_jobs_for_pr).with(123).and_return([meta_job, other_job])
+        allow(mock_client).to receive(:check_runs_for_pr).and_return([meta_job, other_job])
+        allow(mock_client).to receive(:failed_jobs_for_pr).and_return([meta_job, other_job])
         allow(mock_categorizer).to receive(:categorize_jobs).and_return([meta_job_failure, lint_job_failure])
         allow(mock_categorizer).to receive(:group_by_category).and_return({
           meta: [meta_job_failure],
@@ -150,12 +170,15 @@ RSpec.describe Bells do
       let(:other_job) do
         OpenStruct.new(
           name: "rubocop/lint",
-          id: 67890
+          id: 67890,
+          status: "completed",
+          conclusion: "failure"
         )
       end
 
       before do
-        allow(mock_client).to receive(:failed_jobs_for_pr).with(123).and_return([other_job])
+        allow(mock_client).to receive(:check_runs_for_pr).and_return([other_job])
+        allow(mock_client).to receive(:failed_jobs_for_pr).and_return([other_job])
         allow(mock_categorizer).to receive(:categorize_jobs).and_return([])
         allow(mock_categorizer).to receive(:group_by_category).and_return({})
       end
@@ -167,6 +190,97 @@ RSpec.describe Bells do
 
         expect(result[:auto_restarted]).to eq(false)
         expect(result[:total_failed_jobs]).to eq(1)
+      end
+    end
+
+    context "when loading from cache" do
+      let(:test_result) do
+        Bells::JunitParser::TestResult.new(
+          test_class: "MyTest",
+          test_name: "test_something",
+          status: :failed,
+          failure_message: "Expected true",
+          stack_trace: "backtrace",
+          execution_time: 0.1,
+          build_context: Bells::JunitParser::BuildContext.new(
+            workflow_name: "CI",
+            job_name: "test",
+            run_id: 123,
+            attempt: 1,
+            file_path: "/tmp/test.xml"
+          )
+        )
+      end
+
+      let(:aggregated_failure) do
+        Bells::FailureAggregator::AggregatedFailure.new(
+          test_class: "MyTest",
+          test_name: "test_something",
+          failure_count: 1,
+          pass_count: 0,
+          instances: [test_result]
+        )
+      end
+
+      before do
+        allow(mock_client).to receive(:check_runs_for_pr).and_return([])
+        allow(mock_client).to receive(:failed_jobs_for_pr).and_return([])
+        allow(mock_categorizer).to receive(:categorize_jobs).and_return([])
+        allow(mock_categorizer).to receive(:group_by_category).and_return({})
+        allow(mock_aggregator).to receive(:summary).and_return(
+          total_failures: 1,
+          unique_tests: 1,
+          flaky_tests: 0,
+          aggregated: [aggregated_failure]
+        )
+
+        # First call to populate cache
+        described_class.analyze_pr(456, cache_dir: "tmp/test_cache")
+      end
+
+      it "deserializes AggregatedFailure structs correctly" do
+        # Second call loads from cache
+        result = described_class.analyze_pr(456, cache_dir: "tmp/test_cache")
+
+        expect(result[:test_details][:aggregated]).to be_an(Array)
+        expect(result[:test_details][:aggregated].size).to eq(1)
+
+        failure = result[:test_details][:aggregated].first
+        expect(failure).to be_a(Bells::FailureAggregator::AggregatedFailure)
+        expect(failure.test_class).to eq("MyTest")
+        expect(failure.test_name).to eq("test_something")
+        expect(failure.failure_count).to eq(1)
+        expect(failure.pass_count).to eq(0)
+        expect(failure.flaky?).to eq(false)
+      end
+
+      it "deserializes TestResult instances correctly" do
+        result = described_class.analyze_pr(456, cache_dir: "tmp/test_cache")
+
+        failure = result[:test_details][:aggregated].first
+        expect(failure.instances).to be_an(Array)
+        expect(failure.instances.size).to eq(1)
+
+        instance = failure.instances.first
+        expect(instance).to be_a(Bells::JunitParser::TestResult)
+        expect(instance.test_class).to eq("MyTest")
+        expect(instance.test_name).to eq("test_something")
+        expect(instance.status).to eq(:failed)
+        expect(instance.failure_message).to eq("Expected true")
+        expect(instance.stack_trace).to eq("backtrace")
+        expect(instance.execution_time).to eq(0.1)
+      end
+
+      it "deserializes BuildContext correctly" do
+        result = described_class.analyze_pr(456, cache_dir: "tmp/test_cache")
+
+        instance = result[:test_details][:aggregated].first.instances.first
+        expect(instance.build_context).to be_a(Bells::JunitParser::BuildContext)
+        expect(instance.build_context.workflow_name).to eq("CI")
+        expect(instance.build_context.job_name).to eq("test")
+        expect(instance.build_context.run_id).to eq(123)
+        expect(instance.build_context.attempt).to eq(1)
+        expect(instance.build_context.file_path).to eq("/tmp/test.xml")
       end
     end
   end
