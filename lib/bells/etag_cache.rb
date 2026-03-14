@@ -15,15 +15,21 @@ module Bells
     # The block should yield a hash with:
     #   { data: ..., etag: ..., not_modified: bool }
     def fetch(key)
+      # Step 1: Read cached ETag under lock (fast - <1ms)
+      cached_etag = nil
       @monitor.synchronize do
-        cached = @cache[key]
+        cached_etag = @cache[key]&.etag
+      end
 
-        # Yield block with cached ETag if available
-        result = yield(cached&.etag)
+      # Step 2: Do network I/O OUTSIDE lock (slow - 50-500ms)
+      result = yield(cached_etag)
 
+      # Step 3: Write result under lock (fast - <1ms)
+      @monitor.synchronize do
         # If 304 Not Modified, return cached data
         if result[:not_modified]
-          return cached.data
+          cached = @cache[key]
+          return cached ? cached.data : nil
         end
 
         # Store new data with new ETag
