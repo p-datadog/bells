@@ -143,9 +143,8 @@ module Bells
       end
 
       if response.success? && response.body
-        # Cache the logs
-        FileUtils.mkdir_p(File.dirname(cache_path))
-        File.write(cache_path, response.body)
+        # Cache the logs using atomic write to prevent corruption
+        Bells.atomic_write(cache_path, response.body)
         response.body
       else
         nil
@@ -240,8 +239,8 @@ module Bells
         return nil
       end
 
-      FileUtils.mkdir_p(cache_dir)
-      File.binwrite(zip_path, response.body)
+      # Use atomic write to prevent corruption from concurrent downloads
+      Bells.atomic_write(zip_path, response.body, binary: true)
 
       unless File.exist?(zip_path)
         error_msg = "Failed to write artifact #{artifact.name}: zip file not created"

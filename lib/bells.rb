@@ -12,6 +12,24 @@ module Bells
   META_CHECK_JOB_NAME = "all-jobs-are-green"
   CACHE_TTL = 300 # 5 minutes
 
+  # Atomic file write helper to prevent corruption from concurrent writes
+  # Writes to a temporary .part file then renames atomically
+  def self.atomic_write(path, content, binary: false)
+    temp_path = "#{path}.part"
+    FileUtils.mkdir_p(File.dirname(path))
+
+    if binary
+      File.binwrite(temp_path, content)
+    else
+      File.write(temp_path, content)
+    end
+
+    File.rename(temp_path, path)
+  rescue => e
+    File.delete(temp_path) if File.exist?(temp_path)
+    raise
+  end
+
   class << self
     def analyze_pr(pr_number, cache_dir: ".cache", pr: nil)
       client = GitHubClient.new
@@ -423,7 +441,7 @@ module Bells
         end
       end
 
-      File.write(path, JSON.pretty_generate(serialized))
+      Bells.atomic_write(path, JSON.pretty_generate(serialized))
     rescue => e
       warn "Failed to save cache for PR #{pr_number}: #{e.message}"
     end
