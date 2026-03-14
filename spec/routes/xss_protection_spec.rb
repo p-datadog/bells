@@ -56,6 +56,7 @@ RSpec.describe "XSS Protection" do
     let(:xss_pr) do
       OpenStruct.new(
         title: "<script>document.location='http://evil.com'</script>",
+        user: OpenStruct.new(login: "testuser"),
         head: OpenStruct.new(sha: "abc123")
       )
     end

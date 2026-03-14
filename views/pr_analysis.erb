@@ -1,9 +1,278 @@
 <h1>PR #<%= @pr_number %>: <%= @pr_title %></h1>
 <p>
+  Author: <%= @pr_author %> |
   CI Status: <span class="ci-status ci-<%= @ci_status %>"><%= {green: "Green", pending_clean: "Pending", pending_failing: "Pending (failing)", failed: "Failed", unknown: "Unknown"}[@ci_status] %></span>
 </p>
 <p><a href="/">Back</a> | <a href="https://github.com/DataDog/dd-trace-rb/pull/<%= @pr_number %>">View on GitHub</a></p>
 
+<% if @use_streaming %>
+<!-- Streaming mode - progressive rendering -->
+
+<!-- Auto-restart notice (populated by SSE) -->
+<div id="auto-restart-notice" style="display: none;" class="card"></div>
+
+<!-- Download errors notice (populated by SSE) -->
+<div id="download-errors-notice" style="display: none;" class="card"></div>
+
+<!-- Job Summary -->
+<div id="job-summary-section">
+  <div id="job-summary-loading" class="loading">
+    <p>⏳ Loading job status...</p>
+  </div>
+  <div id="job-summary-content" style="display: none;"></div>
+</div>
+
+<!-- Categorized Failures -->
+<div id="categorized-failures-section">
+  <div id="categorized-loading" class="loading">
+    <p>⏳ Analyzing failures and categorizing jobs...</p>
+    <p><small>Downloading job logs for infrastructure failure detection...</small></p>
+  </div>
+  <div id="categorized-content" style="display: none;"></div>
+</div>
+
+<!-- Test Details -->
+<div id="test-details-section">
+  <div id="test-details-loading" class="loading">
+    <p>⏳ Downloading and parsing test results...</p>
+    <p><small>This may take 10-30 seconds for first visit. Subsequent visits will be instant.</small></p>
+  </div>
+  <div id="test-details-content" style="display: none;"></div>
+</div>
+
+<!-- Meta Failures (populated by SSE if present) -->
+<div id="meta-failures-section" style="display: none;"></div>
+
+<noscript>
+  <meta http-equiv="refresh" content="10">
+  <p>⏳ Analyzing PR #<%= @pr_number %>... (page will refresh automatically)</p>
+</noscript>
+
+<style>
+.loading {
+  padding: 20px;
+  background: #f8f9fa;
+  border-radius: 4px;
+  border-left: 4px solid #007bff;
+}
+.badge-flaky {
+  background: #ffc107;
+  color: #000;
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-size: 0.85em;
+  font-weight: bold;
+}
+</style>
+
+<script>
+(function() {
+  const prNumber = <%= @pr_number %>;
+  const eventSource = new EventSource('/pr/' + prNumber + '/stream');
+
+  eventSource.addEventListener('job_list', function(e) {
+    const data = JSON.parse(e.data);
+
+    document.getElementById('job-summary-loading').style.display = 'none';
+    document.getElementById('job-summary-content').style.display = 'block';
+
+    const html = '<p><strong>' + data.passed_jobs + '</strong> passed, ' +
+                 '<strong>' + data.failed_jobs + '</strong> failed' +
+                 (data.in_progress > 0 ? ', <strong>' + data.in_progress + '</strong> in progress' : '') +
+                 '</p>';
+
+    document.getElementById('job-summary-content').innerHTML = html;
+  });
+
+  eventSource.addEventListener('categorized_failures', function(e) {
+    const data = JSON.parse(e.data);
+
+    // Show auto-restart notice if applicable
+    if (data.auto_restarted) {
+      const notice = document.getElementById('auto-restart-notice');
+      notice.style.display = 'block';
+      notice.style.background = '#fff3cd';
+      notice.style.borderLeft = '4px solid #ffc107';
+      notice.innerHTML = '<p style="margin: 0;">ℹ️ Automatically restarted the "all-jobs-are-green" job. Refresh the page in a moment to see updated status.</p>';
+    }
+
+    document.getElementById('categorized-loading').style.display = 'none';
+    document.getElementById('categorized-content').style.display = 'block';
+
+    let html = '';
+
+    if (data.categorized && Object.keys(data.categorized).length > 0) {
+      for (const [category, failures] of Object.entries(data.categorized)) {
+        html += renderCategoryCard(category, failures);
+      }
+    } else {
+      html = '<div class="card"><p>No CI failures found for this PR.</p></div>';
+    }
+
+    document.getElementById('categorized-content').innerHTML = html;
+
+    // Render meta failures if present
+    if (data.meta_failures && data.meta_failures.length > 0) {
+      const metaSection = document.getElementById('meta-failures-section');
+      metaSection.style.display = 'block';
+      metaSection.innerHTML = renderMetaFailures(data.meta_failures);
+    }
+  });
+
+  eventSource.addEventListener('test_details', function(e) {
+    const data = JSON.parse(e.data);
+
+    document.getElementById('test-details-loading').style.display = 'none';
+    document.getElementById('test-details-content').style.display = 'block';
+
+    if (data.aggregated && data.aggregated.length > 0) {
+      document.getElementById('test-details-content').innerHTML = renderTestDetails(data);
+    } else {
+      document.getElementById('test-details-content').innerHTML = '';
+    }
+  });
+
+  eventSource.addEventListener('complete', function(e) {
+    console.log('Analysis complete');
+    eventSource.close();
+  });
+
+  eventSource.addEventListener('error', function(e) {
+    console.error('SSE error:', e);
+
+    // Show error in all loading sections
+    const loadingSections = document.querySelectorAll('.loading');
+    loadingSections.forEach(function(section) {
+      section.innerHTML = '<p>❌ Connection lost. <a href="javascript:location.reload()">Refresh page</a></p>';
+    });
+
+    // Auto-refresh after 5 seconds
+    setTimeout(function() { window.location.reload(); }, 5000);
+  });
+
+  function renderCategoryCard(category, failures) {
+    const categoryLabels = {
+      meta: "Meta",
+      infrastructure: "Infrastructure",
+      type_check: "Type Check",
+      lint: "Lint",
+      security: "Security",
+      tests: "Tests",
+      build: "Build",
+      uncategorized: "Uncategorized"
+    };
+
+    let html = '<div class="card">';
+    html += '<h2>' + (categoryLabels[category] || category) + ' (' + failures.length + ')</h2>';
+    html += '<table><thead><tr><th>Job</th><th></th></tr></thead><tbody>';
+
+    failures.forEach(function(failure) {
+      html += '<tr><td>';
+      html += escapeHtml(failure.job_name);
+
+      if (failure.details) {
+        html += '<details style="margin-top: 8px;">';
+        html += '<summary style="cursor: pointer; color: #333; font-size: 0.9em;">Show error details</summary>';
+        html += '<pre style="margin-top: 8px; padding: 8px; background: #f5f5f5; border-radius: 4px; overflow-x: auto; font-size: 0.85em; color: #000;">';
+        html += escapeHtml(failure.details);
+        html += '</pre></details>';
+      }
+
+      html += '</td><td><a href="' + escapeHtml(failure.url) + '" target="_blank">View Logs</a></td></tr>';
+    });
+
+    html += '</tbody></table></div>';
+    return html;
+  }
+
+  function renderMetaFailures(failures) {
+    let html = '<div class="card" style="opacity: 0.7;">';
+    html += '<h2>Also Failed</h2>';
+    html += '<p style="margin-bottom: 10px;"><small>The meta-check job also failed, but this is expected when other jobs fail:</small></p>';
+    html += '<table><thead><tr><th>Job</th><th></th></tr></thead><tbody>';
+
+    failures.forEach(function(failure) {
+      html += '<tr><td>' + escapeHtml(failure.job_name) + '</td>';
+      html += '<td><a href="' + escapeHtml(failure.url) + '" target="_blank">View Logs</a></td></tr>';
+    });
+
+    html += '</tbody></table></div>';
+    return html;
+  }
+
+  function renderTestDetails(data) {
+    let html = '<div class="card">';
+    html += '<h2>Test Failure Details</h2>';
+    html += '<p><strong>' + data.unique_tests + '</strong> failed tests';
+    if (data.flaky_tests > 0) {
+      html += ' (<strong>' + data.flaky_tests + '</strong> flaky)';
+    }
+    html += '</p>';
+    html += '<input type="text" class="search" placeholder="Filter tests...">';
+    html += '<table><thead><tr><th>Test</th><th>Failures</th><th>Status</th></tr></thead><tbody>';
+
+    data.aggregated.forEach(function(failure) {
+      html += '<tr class="expandable">';
+      html += '<td><strong>' + escapeHtml(failure.test_class) + '</strong><br>';
+      html += '<code>' + escapeHtml(failure.test_name) + '</code></td>';
+      html += '<td>' + failure.failure_count;
+      if (failure.pass_count > 0) {
+        html += ' / ' + failure.pass_count + ' passed';
+      }
+      html += '</td><td>';
+
+      if (failure.pass_count > 0 && failure.failure_count > 0) {
+        html += '<span class="badge-flaky">Flaky</span>';
+      }
+
+      html += '</td></tr>';
+
+      // Expand details row
+      html += '<tr class="details"><td colspan="3">';
+      failure.instances.forEach(function(instance, i) {
+        html += '<h4>Instance ' + (i + 1);
+        if (instance.status === 'passed') {
+          html += ' <span style="color: #28a745;">✓ PASSED</span>';
+        } else {
+          html += ' <span style="color: #dc3545;">✗ FAILED</span>';
+        }
+        html += '</h4>';
+
+        if (instance.status === 'failed' || instance.status === ':failed') {
+          if (instance.failure_message) {
+            html += '<p><strong>Message:</strong> ' + escapeHtml(instance.failure_message) + '</p>';
+          }
+          if (instance.stack_trace && instance.stack_trace.length > 0) {
+            html += '<pre>' + escapeHtml(instance.stack_trace) + '</pre>';
+          }
+        }
+
+        if (instance.build_context) {
+          html += '<p><small>Run: ' + instance.build_context.run_id;
+          if (instance.build_context.job_name) {
+            html += ' | Job: ' + escapeHtml(instance.build_context.job_name);
+          }
+          html += '</small></p>';
+        }
+      });
+      html += '</td></tr>';
+    });
+
+    html += '</tbody></table></div>';
+    return html;
+  }
+
+  function escapeHtml(text) {
+    if (!text) return '';
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+  }
+})();
+</script>
+
+<% else %>
+<!-- Non-streaming mode (fallback) -->
 <% if @results[:auto_restarted] %>
 <div class="card" style="background: #fff3cd; border-left: 4px solid #ffc107;">
   <p style="margin: 0;">ℹ️ Automatically restarted the "<%= Bells::META_CHECK_JOB_NAME %>" job. Refresh the page in a moment to see updated status.</p>
@@ -139,4 +408,6 @@
     </tbody>
   </table>
 </div>
+<% end %>
+
 <% end %>

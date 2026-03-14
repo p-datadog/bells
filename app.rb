@@ -74,9 +74,57 @@ get "/pr/:number" do
   client = Bells::GitHubClient.new
   pr = client.pull_request(@pr_number)
   @pr_title = pr.title
+  @pr_author = pr.user.login
   @ci_status = client.ci_status(pr.head.sha)
-  @results = Bells.analyze_pr(@pr_number, pr: pr)
+
+  # Use streaming in development/production, not in tests
+  @use_streaming = settings.environment != :test
+
+  # In test mode or if streaming disabled, run full analysis
+  unless @use_streaming
+    @results = Bells.analyze_pr(@pr_number, pr: pr)
+  end
+
   erb :pr_analysis
+end
+
+get "/pr/:number/stream" do
+  pr_number = params[:number].to_i
+
+  # Set SSE headers
+  content_type "text/event-stream"
+  headers "Cache-Control" => "no-cache",
+          "X-Accel-Buffering" => "no" # Disable nginx buffering
+
+  stream(:keep_open) do |out|
+    begin
+      client = Bells::GitHubClient.new
+      pr = client.pull_request(pr_number)
+
+      # Send basic PR info immediately
+      out << "event: pr_basic\n"
+      out << "data: #{json(number: pr_number, title: pr.title, author: pr.user.login)}\n\n"
+
+      ci_status = client.ci_status(pr.head.sha)
+      out << "event: ci_status\n"
+      out << "data: #{json(status: ci_status.to_s)}\n\n"
+
+      # Run analysis with progress callbacks
+      Bells.analyze_pr_streaming(pr_number, pr: pr) do |event, data|
+        out << "event: #{event}\n"
+        out << "data: #{data.to_json}\n\n"
+      end
+
+      # Send completion event
+      out << "event: complete\n"
+      out << "data: {\"status\":\"done\"}\n\n"
+    rescue => e
+      out << "event: error\n"
+      out << "data: #{json(message: e.message)}\n\n"
+    ensure
+      out.close
+    end
+  end
 end
 
 get "/api/pr/:number" do
@@ -145,4 +193,10 @@ post "/pr/:number/restart_category" do
 
   # Redirect with feedback
   redirect "/pr/#{pr_number}?restarted=#{success_count}&failed=#{failure_count}"
+end
+
+helpers do
+  def json(obj)
+    obj.to_json
+  end
 end
