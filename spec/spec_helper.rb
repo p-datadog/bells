@@ -6,6 +6,7 @@ require "bundler/setup"
 require "rack/test"
 require "vcr"
 require "webmock/rspec"
+require "ostruct"
 
 require_relative "../lib/bells"
 

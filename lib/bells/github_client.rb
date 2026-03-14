@@ -6,27 +6,95 @@ require "faraday/follow_redirects"
 require "zip"
 require "fileutils"
 require "open3"
+require_relative "etag_cache"
 
 module Bells
   class GitHubClient
     REPO = "DataDog/dd-trace-rb"
 
-    def initialize(token: nil)
+    # Global ETag cache shared across all instances
+    ETAG_CACHE = ETagCache.new
+
+    def initialize(token: nil, etag_cache: ETAG_CACHE)
       @token = token || ENV["GITHUB_TOKEN"] || fetch_gh_token
       @token = nil if @token&.empty?
       @client = Octokit::Client.new(access_token: @token)
       @client.auto_paginate = false
+      @etag_cache = etag_cache
     end
 
     def pull_requests(state: "open", per_page: 30)
-      @client.pull_requests(REPO, state: state, per_page: per_page)
+      fetch_with_etag("pulls:#{state}:#{per_page}") do |cached_etag|
+        options = {}
+        options[:headers] = { "If-None-Match" => cached_etag } if cached_etag
+
+        response = @client.pull_requests(REPO, state: state, per_page: per_page, **options)
+
+        # Check if response was 304 Not Modified
+        last_response = @client.last_response
+        if last_response && last_response.status == 304
+          # Data not modified, return cached indicator
+          { data: nil, etag: cached_etag, not_modified: true }
+        else
+          # New data received
+          etag = last_response&.headers&.[]("etag")
+          { data: response, etag: etag, not_modified: false }
+        end
+      end
     end
 
     def pull_request(pr_number)
-      @client.pull_request(REPO, pr_number)
+      fetch_with_etag("pull:#{pr_number}") do |cached_etag|
+        options = {}
+        options[:headers] = { "If-None-Match" => cached_etag } if cached_etag
+
+        response = @client.pull_request(REPO, pr_number, **options)
+
+        # Check if response was 304 Not Modified
+        last_response = @client.last_response
+        if last_response && last_response.status == 304
+          # Data not modified, return cached indicator
+          { data: nil, etag: cached_etag, not_modified: true }
+        else
+          # New data received
+          etag = last_response&.headers&.[]("etag")
+          { data: response, etag: etag, not_modified: false }
+        end
+      end
     end
 
     def ci_status(sha)
+      # Use ETag for first page as freshness indicator
+      # If first page returns 304, skip fetching - data likely unchanged
+      # If first page returns 200, fetch all pages
+      first_page_fresh = fetch_with_etag("check_runs:#{sha}:page1") do |cached_etag|
+        options = { per_page: 100 }
+        options[:headers] = { "If-None-Match" => cached_etag } if cached_etag
+
+        response = @client.check_runs_for_ref(REPO, sha, **options)
+
+        # Check if response was 304 Not Modified
+        last_response = @client.last_response
+        if last_response && last_response.status == 304
+          # 304 - first page unchanged, likely rest unchanged too
+          { data: nil, etag: cached_etag, not_modified: true }
+        else
+          # New data received
+          etag = last_response&.headers&.[]("etag")
+          { data: response, etag: etag, not_modified: false }
+        end
+      end
+
+      # If first page returned 304, return cached result if available
+      if first_page_fresh.nil?
+        cached_status = @etag_cache.fetch("ci_status_result:#{sha}") do |_|
+          # No cached result, need to fetch
+          { data: nil, etag: nil, not_modified: false }
+        end
+        return cached_status if cached_status
+      end
+
+      # Fetch all pages (first page was fresh or no cached result)
       check_runs = with_auto_paginate { @client.check_runs_for_ref(REPO, sha)[:check_runs] }
       return :unknown if check_runs.empty?
 
@@ -36,38 +104,53 @@ module Bells
       has_failures = conclusions.include?("failure")
       all_complete = statuses.all? { |s| s == "completed" }
 
-      if all_complete
+      result = if all_complete
         has_failures ? :failed : :green
       else
         has_failures ? :pending_failing : :pending_clean
       end
+
+      # Cache the computed result
+      @etag_cache.fetch("ci_status_result:#{sha}") do |_|
+        { data: result, etag: nil, not_modified: false }
+      end
+
+      result
     end
 
-    def workflow_runs_for_pr(pr_number)
-      pr = @client.pull_request(REPO, pr_number)
+    def workflow_runs_for_pr(pr_number, pr: nil)
+      pr ||= @client.pull_request(REPO, pr_number)
       head_sha = pr.head.sha
 
       runs = @client.repository_workflow_runs(REPO, branch: pr.head.ref)[:workflow_runs]
       runs.select { |run| run.head_sha == head_sha }
     end
 
-    def failed_runs(pr_number)
-      workflow_runs_for_pr(pr_number).select { |run| run.conclusion == "failure" }
+    def failed_runs(pr_number, pr: nil)
+      workflow_runs_for_pr(pr_number, pr: pr).select { |run| run.conclusion == "failure" }
     end
 
-    def failed_jobs_for_pr(pr_number)
-      pr = @client.pull_request(REPO, pr_number)
-      check_runs = with_auto_paginate { @client.check_runs_for_ref(REPO, pr.head.sha)[:check_runs] }
+    def check_runs_for_pr(pr_number, pr: nil)
+      pr ||= @client.pull_request(REPO, pr_number)
+      with_auto_paginate { @client.check_runs_for_ref(REPO, pr.head.sha)[:check_runs] }
+    end
+
+    def failed_jobs_for_pr(pr_number, pr: nil, check_runs: nil)
+      check_runs ||= check_runs_for_pr(pr_number, pr: pr)
       check_runs.select { |run| run.conclusion == "failure" }
     end
 
-    def in_progress_jobs_for_pr(pr_number)
-      pr = @client.pull_request(REPO, pr_number)
-      check_runs = with_auto_paginate { @client.check_runs_for_ref(REPO, pr.head.sha)[:check_runs] }
+    def in_progress_jobs_for_pr(pr_number, pr: nil, check_runs: nil)
+      check_runs ||= check_runs_for_pr(pr_number, pr: pr)
       check_runs.select { |run| run.status != "completed" }
     end
 
-    def job_logs(job_id)
+    def job_logs(job_id, cache_dir: ".cache")
+      # Check cache first
+      cache_path = File.join(cache_dir, "logs", "#{job_id}.log")
+      return File.read(cache_path) if File.exist?(cache_path)
+
+      # Fetch from API
       url = "https://api.github.com/repos/#{REPO}/actions/jobs/#{job_id}/logs"
 
       conn = Faraday.new do |f|
@@ -79,7 +162,14 @@ module Bells
         req.headers["Accept"] = "application/vnd.github+json"
       end
 
-      response.success? ? response.body : nil
+      if response.success? && response.body
+        # Cache the logs
+        FileUtils.mkdir_p(File.dirname(cache_path))
+        File.write(cache_path, response.body)
+        response.body
+      else
+        nil
+      end
     rescue
       nil
     end
@@ -99,12 +189,12 @@ module Bells
       response.success?
     end
 
-    def download_junit_artifacts(pr_number, cache_dir:)
+    def download_junit_artifacts(pr_number, cache_dir:, pr: nil)
       pr_cache = File.join(cache_dir, pr_number.to_s)
       FileUtils.mkdir_p(pr_cache)
       @download_errors = []
 
-      result = failed_runs(pr_number).flat_map do |run|
+      result = failed_runs(pr_number, pr: pr).flat_map do |run|
         download_artifacts_for_run(run, pr_cache)
       end
 
@@ -112,6 +202,13 @@ module Bells
     end
 
     private
+
+    # Wrapper for ETag-based conditional requests
+    def fetch_with_etag(cache_key)
+      @etag_cache.fetch(cache_key) do |cached_etag|
+        yield(cached_etag)
+      end
+    end
 
     def with_auto_paginate
       original = @client.auto_paginate

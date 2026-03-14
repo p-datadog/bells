@@ -4,6 +4,7 @@ require "sinatra"
 require "json"
 require_relative "lib/bells"
 require_relative "lib/bells/pr_cache"
+require_relative "lib/bells/etag_cache"
 require_relative "lib/bells/background_refresher"
 
 set :public_folder, File.join(__dir__, "public")
@@ -14,6 +15,9 @@ set :erb, escape_html: true
 
 # In-memory cache for PR data
 PR_CACHE = Bells::PrCache.new
+
+# ETag cache for staleness detection (accessed via GitHubClient::ETAG_CACHE)
+# No need to create a separate constant here since GitHubClient has ETAG_CACHE
 
 # Background refresher to keep cache warm
 BACKGROUND_REFRESHER = Bells::BackgroundRefresher.new(PR_CACHE, interval: 120)
@@ -62,7 +66,7 @@ get "/pr/:number" do
   pr = client.pull_request(@pr_number)
   @pr_title = pr.title
   @ci_status = client.ci_status(pr.head.sha)
-  @results = Bells.analyze_pr(@pr_number)
+  @results = Bells.analyze_pr(@pr_number, pr: pr)
   erb :pr_analysis
 end
 

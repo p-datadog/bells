@@ -18,11 +18,13 @@ RSpec.describe Bells::GitHubClient do
 
   describe "#ci_status" do
     let(:octokit_client) { instance_double(Octokit::Client) }
+    let(:last_response) { OpenStruct.new(status: 200, headers: { "etag" => '"abc123"' }) }
 
     before do
       allow(Octokit::Client).to receive(:new).and_return(octokit_client)
       allow(octokit_client).to receive(:auto_paginate=)
       allow(octokit_client).to receive(:auto_paginate).and_return(false)
+      allow(octokit_client).to receive(:last_response).and_return(last_response)
     end
 
     it "returns :green when all checks pass" do
