@@ -149,19 +149,26 @@ module Bells
       FileUtils.mkdir_p(File.dirname(path))
 
       # Convert structs to hashes for JSON serialization
+      # Deep copy to avoid modifying the original result
       serialized = result.dup
+      if result[:test_details]
+        serialized[:test_details] = result[:test_details].dup
+        serialized[:test_details][:aggregated] = result[:test_details][:aggregated].dup if result[:test_details][:aggregated]
+      end
+      serialized[:categorized_failures] = result[:categorized_failures].dup if result[:categorized_failures]
+      serialized[:meta_failures] = result[:meta_failures].dup if result[:meta_failures]
       serialized[:head_sha] = pr.head.sha
       serialized[:cached_at] = Time.now.iso8601
 
       # Convert JobFailure structs to hashes
       if serialized[:categorized_failures]
         serialized[:categorized_failures] = serialized[:categorized_failures].transform_values do |failures|
-          failures.map(&:to_h)
+          failures.dup.map(&:to_h)
         end
       end
 
       if serialized[:meta_failures]
-        serialized[:meta_failures] = serialized[:meta_failures].map(&:to_h)
+        serialized[:meta_failures] = serialized[:meta_failures].dup.map(&:to_h)
       end
 
       # Convert AggregatedFailure structs (including nested TestResult instances)
