@@ -125,5 +125,62 @@ RSpec.describe Bells::GitHubClient do
         expect(xml_files).not_to be_empty
       end
     end
+
+    it "downloads artifacts from all workflow runs, not just failed ones" do
+      # Mock PR
+      pr = OpenStruct.new(
+        number: 123,
+        head: OpenStruct.new(
+          sha: "abc123",
+          ref: "test-branch"
+        )
+      )
+
+      # Mock workflow runs with various conclusions
+      in_progress_run = OpenStruct.new(
+        id: 1001,
+        name: "Unit Tests",
+        status: "in_progress",
+        conclusion: nil,
+        head_sha: "abc123"
+      )
+
+      success_run = OpenStruct.new(
+        id: 1002,
+        name: "Linting",
+        status: "completed",
+        conclusion: "success",
+        head_sha: "abc123"
+      )
+
+      failed_run = OpenStruct.new(
+        id: 1003,
+        name: "Integration Tests",
+        status: "completed",
+        conclusion: "failure",
+        head_sha: "abc123"
+      )
+
+      # Mock client methods
+      allow(client.instance_variable_get(:@client)).to receive(:pull_request).and_return(pr)
+      allow(client.instance_variable_get(:@client)).to receive(:repository_workflow_runs)
+        .and_return({ workflow_runs: [in_progress_run, success_run, failed_run] })
+
+      # Mock artifact downloads for all runs
+      allow(client).to receive(:download_artifacts_for_run).with(in_progress_run, anything).and_return([".cache/123/1001_junit"])
+      allow(client).to receive(:download_artifacts_for_run).with(success_run, anything).and_return([".cache/123/1002_junit"])
+      allow(client).to receive(:download_artifacts_for_run).with(failed_run, anything).and_return([".cache/123/1003_junit"])
+
+      result = client.download_junit_artifacts(123, cache_dir: cache_dir, pr: pr)
+
+      # Verify artifacts downloaded from ALL runs, not just failed ones
+      expect(client).to have_received(:download_artifacts_for_run).with(in_progress_run, anything)
+      expect(client).to have_received(:download_artifacts_for_run).with(success_run, anything)
+      expect(client).to have_received(:download_artifacts_for_run).with(failed_run, anything)
+
+      expect(result[:artifact_dirs]).to include(".cache/123/1001_junit")
+      expect(result[:artifact_dirs]).to include(".cache/123/1002_junit")
+      expect(result[:artifact_dirs]).to include(".cache/123/1003_junit")
+    end
   end
 end
