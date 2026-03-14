@@ -83,8 +83,12 @@ get "/pr/:number" do
   client = Bells::GitHubClient.new
   puts "[MAIN ROUTE TIMING] #{((Time.now - start_time) * 1000).to_i}ms - GitHubClient initialized"
 
-  pr = client.pull_request(@pr_number)
-  puts "[MAIN ROUTE TIMING] #{((Time.now - start_time) * 1000).to_i}ms - PR fetched"
+  # Try cache first (background refresh populates this)
+  pr = PR_CACHE.fetch("pr:#{@pr_number}") do
+    client.pull_request(@pr_number)
+  end
+  cache_source = PR_CACHE.fetch("pr:#{@pr_number}") { nil } ? "cache" : "API"
+  puts "[MAIN ROUTE TIMING] #{((Time.now - start_time) * 1000).to_i}ms - PR fetched (from #{cache_source})"
 
   @pr_title = pr.title
   @pr_author = pr.user.login

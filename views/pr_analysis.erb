@@ -3,7 +3,7 @@
   Author: <%= @pr_author %> |
   CI Status: <span class="ci-status ci-<%= @ci_status %>"><%= {green: "Green", pending_clean: "Pending", pending_failing: "Pending (failing)", failed: "Failed", unknown: "Unknown"}[@ci_status] %></span>
 </p>
-<p><a href="/">Back</a> | <a href="https://github.com/DataDog/dd-trace-rb/pull/<%= @pr_number %>">View on GitHub</a></p>
+<p><a href="/">Home</a> | <a href="https://github.com/DataDog/dd-trace-rb/pull/<%= @pr_number %>">View on GitHub</a></p>
 
 <% if @use_streaming %>
 <!-- Streaming mode - progressive rendering -->

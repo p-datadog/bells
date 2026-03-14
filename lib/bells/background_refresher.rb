@@ -99,10 +99,15 @@ module Bells
         raise
       end
 
+      # Cache each PR individually so user requests benefit
+      prs.each do |pr|
+        @cache.set("pr:#{pr.number}", pr, ttl: @interval * 2)
+      end
+
       # Use set instead of fetch to avoid race condition
       @cache.set("pr_list", { prs: prs, ci_statuses: ci_statuses }, ttl: @interval * 2)
 
-      puts "[#{Time.now}] Background refresh: Complete (#{prs.size} PRs, #{ci_statuses.size} statuses)"
+      puts "[#{Time.now}] Background refresh: Complete (#{prs.size} PRs, #{ci_statuses.size} statuses, cached #{prs.size} individual PRs)"
 
       # Pre-warm PR analysis for default author's PRs
       if @default_author

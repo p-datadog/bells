@@ -34,8 +34,10 @@ module Bells
     def analyze_pr(pr_number, cache_dir: ".cache", pr: nil)
       client = GitHubClient.new
 
-      # Fetch PR once if not provided
-      pr ||= client.pull_request(pr_number)
+      # Fetch PR once if not provided - check cache first (background refresh populates this)
+      pr ||= PR_CACHE.fetch("pr:#{pr_number}") do
+        client.pull_request(pr_number)
+      end
 
       # Check cache first
       cached = load_cached_analysis(pr_number, cache_dir, pr)
@@ -136,9 +138,12 @@ module Bells
         return nil
       end
 
-      # Fetch PR if not provided
-      pr ||= client.pull_request(pr_number)
-      log_timing.call("PR fetched (or reused)")
+      # Fetch PR if not provided - check cache first (background refresh populates this)
+      pr ||= PR_CACHE.fetch("pr:#{pr_number}") do
+        client.pull_request(pr_number)
+      end
+      cache_source = PR_CACHE.fetch("pr:#{pr_number}") { nil } ? "cache" : "API"
+      log_timing.call("PR fetched (from #{cache_source})")
 
       # Check cache first - if cached, send all events immediately
       cached = load_cached_analysis(pr_number, cache_dir, pr)
