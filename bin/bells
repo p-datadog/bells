@@ -11,14 +11,22 @@ OptionParser.new do |opts|
     options[:author] = author
   end
 
+  opts.on("-b", "--no-background", "Disable background operations (PR cache refresh and warming)") do
+    options[:no_background] = true
+  end
+
   opts.on("-h", "--help", "Prints this help") do
     puts opts
     exit
   end
 end.parse!
 
-# Set environment variable if author specified
+# Set environment variables based on options
 ENV['BELLS_DEFAULT_AUTHOR'] = options[:author] if options[:author]
+
+if options[:no_background]
+  ENV['BELLS_BACKGROUND_REFRESH'] = 'false'
+end
 
 # Execute puma with any remaining arguments
 exec('bundle', 'exec', 'puma', *ARGV)

@@ -58,14 +58,25 @@ When "all-jobs-are-green" is the only failing job, it's automatically restarted 
 
 **Usage:**
 ```bash
-# Production
-bundle exec puma
+# Using bin/bells wrapper (recommended)
+bin/bells                        # Default: background refresh enabled
+bin/bells -a alice               # Filter by author + pre-warm their PRs
+bin/bells -b                     # Disable all background operations
+
+# Long options (equivalent)
+bin/bells --author alice
+bin/bells --no-background
+
+# Direct puma usage
+bundle exec puma                 # Default
 
 # Development (auto-reload on file changes)
 bundle exec rerun -- puma
 
-# With default author filter
-BELLS_DEFAULT_AUTHOR=ivoanjo bundle exec puma
+# With environment variables (advanced)
+BELLS_DEFAULT_AUTHOR=alice bundle exec puma
+BELLS_BACKGROUND_REFRESH=false bundle exec puma
+BELLS_BACKGROUND_WARMING=false BELLS_DEFAULT_AUTHOR=alice bundle exec puma
 
 # Visit http://localhost:9292
 ```
