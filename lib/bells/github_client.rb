@@ -194,7 +194,7 @@ module Bells
       FileUtils.mkdir_p(pr_cache)
       @download_errors = []
 
-      result = failed_runs(pr_number, pr: pr).flat_map do |run|
+      result = workflow_runs_for_pr(pr_number, pr: pr).flat_map do |run|
         download_artifacts_for_run(run, pr_cache)
       end
 
