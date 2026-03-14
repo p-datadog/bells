@@ -70,13 +70,21 @@ get "/" do
 end
 
 get "/pr/:number" do
+  start_time = Time.now
   @pr_number = params[:number].to_i
+
   client = Bells::GitHubClient.new
+  puts "[MAIN ROUTE TIMING] #{((Time.now - start_time) * 1000).to_i}ms - GitHubClient initialized"
+
   pr = client.pull_request(@pr_number)
+  puts "[MAIN ROUTE TIMING] #{((Time.now - start_time) * 1000).to_i}ms - PR fetched"
+
   @pr_title = pr.title
   @pr_author = pr.user.login
   @pr_head_sha = pr.head.sha
+
   @ci_status = client.ci_status(@pr_head_sha)
+  puts "[MAIN ROUTE TIMING] #{((Time.now - start_time) * 1000).to_i}ms - CI status fetched (#{@ci_status})"
 
   # Use streaming in development/production, not in tests
   @use_streaming = settings.environment != :test
@@ -86,7 +94,9 @@ get "/pr/:number" do
     @results = Bells.analyze_pr(@pr_number, pr: pr)
   end
 
-  erb :pr_analysis
+  result = erb :pr_analysis
+  puts "[MAIN ROUTE TIMING] #{((Time.now - start_time) * 1000).to_i}ms - Skeleton rendered and sent"
+  result
 end
 
 get "/pr/:number/stream" do

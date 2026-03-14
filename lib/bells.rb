@@ -102,6 +102,9 @@ module Bells
       client = GitHubClient.new
       log_timing.call("GitHubClient initialized")
 
+      # Debug: Log what ci_status we received
+      puts "[DEBUG] ci_status parameter: #{ci_status.inspect} (class: #{ci_status.class})"
+
       # If CI status is green, skip everything - all jobs passed
       if ci_status == :green
         log_timing.call("CI status green - skipping expensive operations (no failures)")
