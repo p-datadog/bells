@@ -122,30 +122,60 @@ PR detail pages use Server-Sent Events (SSE) to progressively update the UI as a
 
 ## Performance Optimizations
 
-Comprehensive caching and optimization reducing PR detail page load time by 70% and API calls by 84%.
+Comprehensive caching and optimization reducing PR detail page load time by 98% (31s → 0.7s).
 
 **Multi-Layer Caching Strategy:**
 1. **HTTP/ETag Layer** - Conditional requests with ETags (304 Not Modified responses)
-2. **Memory/LRU Layer** - In-memory cache with TTL and LRU eviction (max 1000 entries)
+2. **Memory/LRU Layer** - In-memory cache with TTL, LRU eviction, per-key locking (max 1000 entries)
 3. **Disk Layer** - Persistent file cache for analysis results, job logs, and artifacts
 
-**Key Optimizations:**
-- ETag-based conditional requests for `pull_request()` and `ci_status()` - eliminates redundant data transfer
-- PR object passed through call stack - eliminates 5 redundant API calls per page load
-- Check runs fetched once and filtered - eliminates duplicate pagination (4-8 fewer API calls)
-- Job logs cached to disk at `.cache/logs/{job_id}.log` - prevents re-downloading 1-10MB files
-- Two-pass JUnit parsing - parses failures first, then full results only for failed tests (70% faster)
+**Major Optimizations:**
+1. **combined_status API** - Single API call returning one status object (not 462 check runs)
+   - 9s → 0.3s (97% faster)
+2. **Cache individual PRs from background** - Background refresh caches each PR individually for reuse
+   - User PR fetch: 650ms → 47ms (93% faster)
+   - Makes background operations help instead of hurt
+3. **Skip work for passing PRs** - When ci_status is :green, skip check_runs, artifacts, and parsing
+   - Saves 14.7s for passing PRs
+4. **Parallel job log downloads** - Download logs concurrently instead of sequentially
+   - 5 jobs: 4s → 0.8s (80% faster)
+5. **Two-phase categorization** - Show initial results before infrastructure detection
+   - User sees categories instantly, infrastructure detection follows
+6. **PR object passed through call stack** - Eliminates 5 redundant API calls per page load
+7. **Check runs fetched once and filtered** - Eliminates duplicate pagination
+8. **Job logs cached to disk** at `.cache/logs/{job_id}.log` - Prevents re-downloading 1-10MB files
+9. **Two-pass JUnit parsing** - Parses failures first, then full results only for failed tests
 
 **Performance Impact:**
-- First visit (cold cache): 10-30s → 3-8s (70% improvement)
-- After new commit (PR unchanged): 10-30s → 200-500ms (95% improvement)
-- API calls per page load: 30-97 → 3-5 (84% reduction)
+
+Passing PRs (most common):
+- Before: 31s (fetch all check runs + all artifacts)
+- After: 0.7s (skip everything)
+- **98% improvement**
+
+Failing PRs (with cached artifacts):
+- Before: 31s
+- After: 4-6s
+- **81-87% improvement**
+
+Measured timings (PR 5448, typical passing PR):
+```
+[MAIN ROUTE TIMING] 27ms - PR fetched (from cache)
+[MAIN ROUTE TIMING] 28ms - CI status (from cache)
+[MAIN ROUTE TIMING] 30ms - Skeleton rendered
+
+[TIMING] 27ms - CI status green - skipping expensive operations
+[TIMING] 27ms - All events sent
+
+Total: 57ms server + ~650ms network/browser = ~700ms perceived
+```
 
 **Components:**
 - `Bells::ETagCache` - Thread-safe ETag storage for conditional HTTP requests
-- `Bells::PrCache` - LRU in-memory cache with TTL expiration and probabilistic cleanup
+- `Bells::PrCache` - LRU cache with per-key locking to prevent cache stampede
 - `Bells::BackgroundRefresher` - Async task that:
   - Warms PR list cache every 2 minutes
+  - Caches each PR individually (reusable by user requests)
   - Pre-warms full PR analysis for default author's PRs (if `BELLS_DEFAULT_AUTHOR` set)
   - Downloads artifacts, job logs, and test details in background
   - Uses exponential backoff on failures
@@ -155,6 +185,7 @@ Comprehensive caching and optimization reducing PR detail page load time by 70% 
 - Job logs: Permanent (immutable)
 - Artifacts: Permanent (immutable, keyed by run_id)
 - PR list: 2-minute TTL (background refresh)
+- Individual PRs: 2-minute TTL (background refresh)
 - ETags: Validated on each request via If-None-Match header
 
 **Documentation:**
