@@ -146,11 +146,21 @@ module Bells
       # Debug: Log what ci_status we received
       puts "[DEBUG] ci_status parameter: #{ci_status.inspect} (class: #{ci_status.class})"
 
-      # If CI status is green, skip everything - all jobs passed
+      # If CI status is green, we can skip expensive operations (no failures to analyze)
+      # but still need to show accurate job counts
       if ci_status == :green
-        log_timing.call("CI status green - skipping expensive operations (no failures)")
+        log_timing.call("CI status green - skipping failure analysis, fetching counts only")
 
-        yield(:job_list, { failed_jobs: 0, in_progress: 0, passed_jobs: 0 })
+        # Fetch counts for display
+        check_runs = client.check_runs_for_pr(pr_number, pr: pr)
+        passed_statuses = client.passed_statuses_for_pr(pr_number, pr: pr)
+        passed_jobs = check_runs.select { |r| r.conclusion == "success" }
+
+        yield(:job_list, {
+          failed_jobs: 0,
+          in_progress: 0,
+          passed_jobs: passed_jobs.size + passed_statuses.size
+        })
         yield(:categorized_failures_initial, { categorized: {}, meta_failures: nil, auto_restarted: false })
         yield(:categorized_failures_final, { categorized: {}, meta_failures: nil, auto_restarted: false })
         yield(:test_details, { total_failures: 0, unique_tests: 0, flaky_tests: 0, aggregated: [] })
