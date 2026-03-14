@@ -17,24 +17,45 @@ module Bells
       @cache = {}
       @monitor = Monitor.new
       @access_order = []
+      @computing = {}  # Track which keys are being computed
+      @key_locks = Hash.new { |h, k| h[k] = Mutex.new }
     end
 
     def fetch(key, ttl: CACHE_TTL)
+      # Quick check without key-specific lock
       @monitor.synchronize do
         cleanup_expired if rand < 0.01 # 1% chance to cleanup
 
         cached = @cache[key]
 
         if cached && !cached.expired?
-          # Update LRU order
+          # Cache hit - update LRU order and return
           @access_order.delete(key)
           @access_order.push(key)
           return cached.data
         end
+      end
 
-        # Cache miss or expired, compute new value
+      # Cache miss - use per-key lock to ensure only one thread computes
+      @key_locks[key].synchronize do
+        # Double-check cache after acquiring key lock (another thread may have computed it)
+        @monitor.synchronize do
+          cached = @cache[key]
+          if cached && !cached.expired?
+            @access_order.delete(key)
+            @access_order.push(key)
+            return cached.data
+          end
+        end
+
+        # Compute new value outside cache lock
         data = yield
-        set_internal(key, data, ttl)
+
+        # Store result
+        @monitor.synchronize do
+          set_internal(key, data, ttl)
+        end
+
         data
       end
     end

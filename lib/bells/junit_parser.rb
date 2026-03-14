@@ -2,6 +2,7 @@
 
 require "nokogiri"
 require "set"
+require "find"
 
 module Bells
   class JunitParser
@@ -43,24 +44,36 @@ module Bells
     end
 
     def parse_directory(dir_path, build_context: nil)
-      Dir.glob(File.join(dir_path, "**/*.xml")).flat_map do |file|
+      find_xml_files(dir_path).flat_map do |file|
         parse_file(file, build_context: build_context || context_from_path(file))
       end
     end
 
     def parse_directory_failures_only(dir_path, build_context: nil)
-      Dir.glob(File.join(dir_path, "**/*.xml")).flat_map do |file|
+      find_xml_files(dir_path).flat_map do |file|
         parse_file_failures_only(file, build_context: build_context || context_from_path(file))
       end
     end
 
     def parse_directory_for_tests(dir_path, test_ids, build_context: nil)
-      Dir.glob(File.join(dir_path, "**/*.xml")).flat_map do |file|
+      find_xml_files(dir_path).flat_map do |file|
         parse_file_for_tests(file, test_ids, build_context: build_context || context_from_path(file))
       end
     end
 
     private
+
+    # Find XML files without using glob (safer - no metacharacter expansion)
+    def find_xml_files(dir_path)
+      xml_files = []
+      Find.find(dir_path) do |path|
+        xml_files << path if File.file?(path) && path.end_with?(".xml")
+      end
+      xml_files
+    rescue Errno::ENOENT
+      # Directory doesn't exist
+      []
+    end
 
     def parse_file_failures_only(path, build_context: nil)
       doc = Nokogiri::XML(File.read(path)) do |config|
