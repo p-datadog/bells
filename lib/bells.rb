@@ -58,7 +58,6 @@ module Bells
       # Check cache first
       cached = load_cached_analysis(pr_number, cache_dir, pr)
       return cached if cached
-      client = GitHubClient.new
       parser = JunitParser.new
       aggregator = FailureAggregator.new
       categorizer = FailureCategorizer.new
