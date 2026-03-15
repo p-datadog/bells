@@ -124,6 +124,37 @@ PR detail pages use Server-Sent Events (SSE) to progressively update the UI as a
 - Server errors sent as SSE error events
 - Graceful degradation to non-streaming mode in test environment
 
+## GitHub API Integration
+
+Two API strategies: GraphQL for the homepage (bulk fetch), REST for PR detail pages (granular operations).
+
+**GraphQL (Homepage):**
+
+`pull_requests_with_status` fetches all open PRs with CI status in a single query via `POST /graphql`. Used by the homepage route and background refresher.
+
+Query fetches per PR: `number`, `title`, `url`, `updatedAt`, `headRefName`, `headRefOid`, `author.login`, and `commits(last:1).commit.statusCheckRollup.state`.
+
+Status mapping from GraphQL `StatusState` enum:
+- `SUCCESS` → `:green`
+- `PENDING` → `:pending_clean`
+- `FAILURE` / `ERROR` → `:failed`
+- `null` or other → `:unknown`
+
+Returns `{ prs: [OpenStruct], ci_statuses: { number => symbol } }` — PR objects match the shape of REST PR objects so callers don't need to distinguish.
+
+Replaces N+1 REST calls (1 `pull_requests` + N `combined_status`) with 1 GraphQL call.
+
+**REST (PR Detail):**
+
+PR analysis uses REST endpoints with ETag caching:
+- `check_runs_for_ref` — paginated, ETag cached on first page (304 returns full cached result)
+- `statuses` — paginated, ETag cached on first page
+- `combined_status` — single call for CI badge on PR detail skeleton
+- `workflow_run_artifacts` — for JUnit artifact downloads
+- `actions/jobs/{id}/logs` — for infrastructure failure detection, cached to disk
+
+All REST calls use the global `ETAG_CACHE` singleton for conditional requests.
+
 ## Performance Optimizations
 
 Comprehensive caching and optimization reducing PR detail page load time by 98% (31s → 0.7s).
