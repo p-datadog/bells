@@ -16,26 +16,26 @@
 
 <!-- Job Summary -->
 <div id="job-summary-section">
-  <div id="job-summary-loading" class="loading">
-    <p>⏳ Loading job status...</p>
-  </div>
+  <p id="job-summary-loading" style="color: #999;">
+    <strong>&mdash;</strong> passed,
+    <strong>&mdash;</strong> failed
+  </p>
   <div id="job-summary-content"></div>
 </div>
 
 <!-- Categorized Failures -->
 <div id="categorized-failures-section">
-  <div id="categorized-loading" class="loading">
-    <p>⏳ Analyzing failures and categorizing jobs...</p>
-    <p><small>Downloading job logs for infrastructure failure detection...</small></p>
+  <div id="categorized-loading" class="card" style="color: #999;">
+    <p>Loading failures...</p>
   </div>
   <div id="categorized-content"></div>
 </div>
 
 <!-- Test Details -->
 <div id="test-details-section">
-  <div id="test-details-loading" class="loading">
-    <p>⏳ Downloading and parsing test results...</p>
-    <p><small>This may take 10-30 seconds for first visit. Subsequent visits will be instant.</small></p>
+  <div id="test-details-loading" class="card" style="color: #999;">
+    <h2>Test Failure Details</h2>
+    <p>Loading test results...</p>
   </div>
   <div id="test-details-content"></div>
 </div>
@@ -49,12 +49,6 @@
 </noscript>
 
 <style>
-.loading {
-  padding: 20px;
-  background: #f8f9fa;
-  border-radius: 4px;
-  border-left: 4px solid #007bff;
-}
 .badge-flaky {
   background: #ffc107;
   color: #000;
