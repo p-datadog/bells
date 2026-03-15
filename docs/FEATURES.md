@@ -158,7 +158,15 @@ Used for detailed CI data that GraphQL can't efficiently provide (paginated chec
 
 All REST calls use the global `ETAG_CACHE` singleton for conditional requests.
 
-**Why not GraphQL for check runs?** GitHub GraphQL paginates check runs at 100/page (same as REST). With 462 check runs, we'd still need 5 queries. ETag caching on the REST endpoint already short-circuits with 304 when data hasn't changed, which is more efficient than re-fetching via GraphQL.
+**When to use GraphQL vs REST:**
+
+Use GraphQL when fetching multiple related objects that would otherwise require N+1 REST calls, and when the data changes frequently enough that ETag caching provides little benefit. GraphQL wins by reducing round trips.
+
+Use REST when:
+- **ETag caching applies** — REST supports conditional requests (`If-None-Match`). On 304 Not Modified, the server returns zero data and the client reuses its cache. GraphQL has no equivalent; every query re-transfers the full response. For data that rarely changes between refreshes (check runs for a given SHA, commit statuses), REST with ETags is faster on repeat requests.
+- **Pagination depth is the bottleneck** — GitHub GraphQL has the same 100-item-per-page limit as REST. For 462 check runs, both need 5 pages. REST with ETag caching on the first page can short-circuit the entire fetch; GraphQL cannot.
+- **The endpoint has no GraphQL equivalent** — Job logs (`actions/jobs/{id}/logs`) and artifact downloads are REST-only.
+- **Write operations** — Job restarts (`actions/jobs/{id}/rerun`) are REST-only.
 
 ## Performance Optimizations
 
