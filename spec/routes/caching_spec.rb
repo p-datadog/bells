@@ -28,8 +28,9 @@ RSpec.describe "Caching integration" do
     PR_CACHE.clear
     BACKGROUND_REFRESHER.stop
     allow(Bells::GitHubClient).to receive(:new).and_return(mock_client)
-    allow(mock_client).to receive(:pull_requests).and_return([mock_pr])
-    allow(mock_client).to receive(:ci_status).with("abc123").and_return(:green)
+    allow(mock_client).to receive(:pull_requests_with_status).and_return({
+      prs: [mock_pr], ci_statuses: { 999 => :green }
+    })
   end
 
   describe "GET /" do
@@ -40,8 +41,7 @@ RSpec.describe "Caching integration" do
       expect(last_response.body).to include("Test PR")
 
       # Second request - cache hit
-      expect(mock_client).not_to receive(:pull_requests)
-      expect(mock_client).not_to receive(:ci_status)
+      expect(mock_client).not_to receive(:pull_requests_with_status)
 
       get "/"
       expect(last_response).to be_ok
@@ -53,8 +53,9 @@ RSpec.describe "Caching integration" do
       get "/"
 
       # Clear mock expectations
-      allow(mock_client).to receive(:pull_requests).and_return([mock_pr])
-      allow(mock_client).to receive(:ci_status).with("abc123").and_return(:failed)
+      allow(mock_client).to receive(:pull_requests_with_status).and_return({
+        prs: [mock_pr], ci_statuses: { 999 => :failed }
+      })
 
       # Wait for cache to expire
       PR_CACHE.invalidate("pr_list")

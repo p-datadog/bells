@@ -11,10 +11,11 @@ RSpec.describe Bells::BackgroundRefresher do
   let(:mock_client) { instance_double(Bells::GitHubClient) }
   let(:mock_pr) { OpenStruct.new(number: 123, head: OpenStruct.new(sha: "abc")) }
 
+  let(:mock_pr_data) { { prs: [mock_pr], ci_statuses: { 123 => :green } } }
+
   before do
     allow(Bells::GitHubClient).to receive(:new).and_return(mock_client)
-    allow(mock_client).to receive(:pull_requests).and_return([mock_pr])
-    allow(mock_client).to receive(:ci_status).with("abc").and_return(:green)
+    allow(mock_client).to receive(:pull_requests_with_status).and_return(mock_pr_data)
   end
 
   after do
@@ -50,10 +51,10 @@ RSpec.describe Bells::BackgroundRefresher do
 
     it "handles refresh errors gracefully and continues running" do
       call_count = 0
-      allow(mock_client).to receive(:pull_requests) do
+      allow(mock_client).to receive(:pull_requests_with_status) do
         call_count += 1
         raise "API Error" if call_count == 1
-        [mock_pr]
+        mock_pr_data
       end
 
       refresher.start
@@ -67,7 +68,7 @@ RSpec.describe Bells::BackgroundRefresher do
     end
 
     it "implements exponential backoff on consecutive failures" do
-      allow(mock_client).to receive(:pull_requests).and_raise("API Error")
+      allow(mock_client).to receive(:pull_requests_with_status).and_raise("API Error")
 
       refresher.start
       sleep 0.5
@@ -90,10 +91,10 @@ RSpec.describe Bells::BackgroundRefresher do
 
     it "waits for current operation to complete" do
       slow_operation = false
-      allow(mock_client).to receive(:pull_requests) do
+      allow(mock_client).to receive(:pull_requests_with_status) do
         slow_operation = true
         sleep 0.5
-        [mock_pr]
+        mock_pr_data
       end
 
       refresher.start
@@ -124,7 +125,7 @@ RSpec.describe Bells::BackgroundRefresher do
     end
 
     it "recovers from API call failures" do
-      allow(mock_client).to receive(:pull_requests).and_raise("API error")
+      allow(mock_client).to receive(:pull_requests_with_status).and_raise("API error")
 
       refresher.start
       sleep 1.5

@@ -57,10 +57,7 @@ end
 get "/" do
   # Use cached PR data (kept warm by background refresher)
   pr_data = PR_CACHE.fetch("pr_list") do
-    client = Bells::GitHubClient.new
-    prs = client.pull_requests
-    ci_statuses = prs.to_h { |pr| [pr.number, client.ci_status(pr.head.sha)] }
-    { prs: prs, ci_statuses: ci_statuses }
+    Bells::GitHubClient.new.pull_requests_with_status
   end
 
   all_prs = pr_data[:prs]

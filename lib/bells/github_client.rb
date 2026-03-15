@@ -63,6 +63,84 @@ module Bells
       end
     end
 
+    # Fetch PRs with CI status in a single GraphQL call (1 API call instead of N+1)
+    def pull_requests_with_status(state: "open", per_page: 30)
+      graphql_state = state == "open" ? "OPEN" : "CLOSED"
+
+      query = <<~GRAPHQL
+        query($owner: String!, $name: String!, $states: [PullRequestState!], $count: Int!) {
+          repository(owner: $owner, name: $name) {
+            pullRequests(states: $states, first: $count, orderBy: {field: UPDATED_AT, direction: DESC}) {
+              nodes {
+                number
+                title
+                url
+                updatedAt
+                headRefName
+                headRefOid
+                author { login }
+                commits(last: 1) {
+                  nodes {
+                    commit {
+                      statusCheckRollup {
+                        state
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      GRAPHQL
+
+      owner, name = REPO.split("/")
+      body = {
+        query: query,
+        variables: { owner: owner, name: name, states: [graphql_state], count: per_page }
+      }
+
+      conn = Faraday.new(url: "https://api.github.com")
+      response = conn.post("/graphql") do |req|
+        req.headers["Authorization"] = "Bearer #{@token}" if @token
+        req.headers["Content-Type"] = "application/json"
+        req.body = body.to_json
+      end
+
+      data = JSON.parse(response.body, symbolize_names: true)
+
+      if data[:errors]
+        warn "GraphQL errors: #{data[:errors].map { |e| e[:message] }.join(', ')}"
+        return { prs: [], ci_statuses: {} }
+      end
+
+      nodes = data.dig(:data, :repository, :pullRequests, :nodes) || []
+
+      prs = nodes.map do |node|
+        OpenStruct.new(
+          number: node[:number],
+          title: node[:title],
+          html_url: node[:url],
+          updated_at: Time.parse(node[:updatedAt]),
+          user: OpenStruct.new(login: node.dig(:author, :login) || "unknown"),
+          head: OpenStruct.new(sha: node[:headRefOid], ref: node[:headRefName])
+        )
+      end
+
+      ci_statuses = nodes.to_h do |node|
+        rollup_state = node.dig(:commits, :nodes, 0, :commit, :statusCheckRollup, :state)
+        status = case rollup_state
+        when "SUCCESS" then :green
+        when "PENDING" then :pending_clean
+        when "FAILURE", "ERROR" then :failed
+        else :unknown
+        end
+        [node[:number], status]
+      end
+
+      { prs: prs, ci_statuses: ci_statuses }
+    end
+
     def ci_status(sha)
       # Use combined_status API - single call returns rollup state
       fetch_with_etag("combined_status:#{sha}") do |cached_etag|

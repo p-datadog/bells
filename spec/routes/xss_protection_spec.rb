@@ -30,8 +30,9 @@ RSpec.describe "XSS Protection" do
 
     before do
       allow(Bells::GitHubClient).to receive(:new).and_return(mock_client)
-      allow(mock_client).to receive(:pull_requests).and_return([xss_pr])
-      allow(mock_client).to receive(:ci_status).with("abc123").and_return(:green)
+      allow(mock_client).to receive(:pull_requests_with_status).and_return({
+        prs: [xss_pr], ci_statuses: { 999 => :green }
+      })
     end
 
     it "escapes XSS in PR titles" do
