@@ -126,6 +126,37 @@ RSpec.describe "Bells.analyze_pr_streaming" do
     end
   end
 
+  describe "green PR fast path" do
+    it "skips all expensive operations when ci_status is green" do
+      events = []
+
+      Bells.analyze_pr_streaming(123, cache_dir: "tmp/test_cache", pr: mock_pr, ci_status: :green) do |event, data|
+        events << [event, data]
+      end
+
+      expect(events.map(&:first)).to eq([:job_list, :categorized_failures_initial, :categorized_failures_final, :test_details])
+
+      _, job_data = events[0]
+      expect(job_data[:failed_jobs]).to eq(0)
+      expect(job_data[:in_progress]).to eq(0)
+      expect(job_data[:passed_jobs]).to eq(0)
+    end
+
+    it "does not call any GitHub API methods" do
+      expect(mock_client).not_to receive(:check_runs_for_pr)
+      expect(mock_client).not_to receive(:failed_jobs_for_pr)
+      expect(mock_client).not_to receive(:in_progress_jobs_for_pr)
+      expect(mock_client).not_to receive(:failed_statuses_for_pr)
+      expect(mock_client).not_to receive(:passed_statuses_for_pr)
+      expect(mock_client).not_to receive(:download_junit_artifacts)
+      expect(mock_client).not_to receive(:job_logs)
+
+      Bells.analyze_pr_streaming(123, cache_dir: "tmp/test_cache", pr: mock_pr, ci_status: :green) do |event, data|
+        # consume
+      end
+    end
+  end
+
   describe "with cached analysis" do
     it "sends all events immediately from cache" do
       # First call to populate cache

@@ -16,7 +16,7 @@
 
 <!-- Job Summary -->
 <div id="job-summary-section">
-  <div id="job-summary-loading" class="loading" style="display: none;">
+  <div id="job-summary-loading" class="loading">
     <p>⏳ Loading job status...</p>
   </div>
   <div id="job-summary-content"></div>
@@ -24,7 +24,7 @@
 
 <!-- Categorized Failures -->
 <div id="categorized-failures-section">
-  <div id="categorized-loading" class="loading" style="display: none;">
+  <div id="categorized-loading" class="loading">
     <p>⏳ Analyzing failures and categorizing jobs...</p>
     <p><small>Downloading job logs for infrastructure failure detection...</small></p>
   </div>
@@ -33,7 +33,7 @@
 
 <!-- Test Details -->
 <div id="test-details-section">
-  <div id="test-details-loading" class="loading" style="display: none;">
+  <div id="test-details-loading" class="loading">
     <p>⏳ Downloading and parsing test results...</p>
     <p><small>This may take 10-30 seconds for first visit. Subsequent visits will be instant.</small></p>
   </div>
@@ -72,6 +72,7 @@
   const eventSource = new EventSource('/pr/' + prNumber + '/stream?ci_status=' + ciStatus);
 
   eventSource.addEventListener('job_list', function(e) {
+    document.getElementById('job-summary-loading').style.display = 'none';
     const data = JSON.parse(e.data);
 
     const html = '<p><strong>' + data.passed_jobs + '</strong> passed, ' +
@@ -83,6 +84,7 @@
   });
 
   eventSource.addEventListener('categorized_failures_initial', function(e) {
+    document.getElementById('categorized-loading').style.display = 'none';
     const data = JSON.parse(e.data);
 
     let html = '';
@@ -131,6 +133,7 @@
   });
 
   eventSource.addEventListener('test_details', function(e) {
+    document.getElementById('test-details-loading').style.display = 'none';
     const data = JSON.parse(e.data);
 
     if (data.aggregated && data.aggregated.length > 0) {
