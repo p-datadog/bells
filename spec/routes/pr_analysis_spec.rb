@@ -130,8 +130,9 @@ RSpec.describe "PR Analysis Routes" do
 
     before do
       allow(Bells::GitHubClient).to receive(:new).and_return(mock_client)
-      allow(mock_client).to receive(:pull_request).with(123).and_return(mock_pr)
-      allow(mock_client).to receive(:ci_status).with("abc123").and_return(:failed)
+      allow(mock_client).to receive(:pull_request_with_status).and_return({
+        pr: mock_pr, ci_status: :failed
+      })
       allow(Bells).to receive(:analyze_pr).with(123, anything).and_return(
         categorized_failures: { type_check: [mock_job_failure] },
         meta_failures: nil,
@@ -167,8 +168,9 @@ RSpec.describe "PR Analysis Routes" do
         auto_restarted: true,
         download_errors: []
       )
-      allow(mock_client).to receive(:pull_request).with(456).and_return(mock_pr)
-      allow(mock_client).to receive(:ci_status).with("abc123").and_return(:failed)
+      allow(mock_client).to receive(:pull_request_with_status).with(456).and_return({
+        pr: mock_pr, ci_status: :failed
+      })
 
       get "/pr/456"
 
@@ -188,8 +190,9 @@ RSpec.describe "PR Analysis Routes" do
         auto_restarted: false,
         download_errors: ["Failed to download artifact junit-test: HTTP 404", "Failed to download artifact results: empty response"]
       )
-      allow(mock_client).to receive(:pull_request).with(789).and_return(mock_pr)
-      allow(mock_client).to receive(:ci_status).with("abc123").and_return(:green)
+      allow(mock_client).to receive(:pull_request_with_status).with(789).and_return({
+        pr: mock_pr, ci_status: :green
+      })
 
       get "/pr/789"
 

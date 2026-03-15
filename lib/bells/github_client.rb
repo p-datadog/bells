@@ -96,50 +96,51 @@ module Bells
       GRAPHQL
 
       owner, name = REPO.split("/")
-      body = {
-        query: query,
-        variables: { owner: owner, name: name, states: [graphql_state], count: per_page }
-      }
-
-      conn = Faraday.new(url: "https://api.github.com")
-      response = conn.post("/graphql") do |req|
-        req.headers["Authorization"] = "Bearer #{@token}" if @token
-        req.headers["Content-Type"] = "application/json"
-        req.body = body.to_json
-      end
-
-      data = JSON.parse(response.body, symbolize_names: true)
-
-      if data[:errors]
-        warn "GraphQL errors: #{data[:errors].map { |e| e[:message] }.join(', ')}"
-        return { prs: [], ci_statuses: {} }
-      end
+      data = graphql_request(query, owner: owner, name: name, states: [graphql_state], count: per_page)
+      return { prs: [], ci_statuses: {} } if data[:errors]
 
       nodes = data.dig(:data, :repository, :pullRequests, :nodes) || []
-
-      prs = nodes.map do |node|
-        OpenStruct.new(
-          number: node[:number],
-          title: node[:title],
-          html_url: node[:url],
-          updated_at: Time.parse(node[:updatedAt]),
-          user: OpenStruct.new(login: node.dig(:author, :login) || "unknown"),
-          head: OpenStruct.new(sha: node[:headRefOid], ref: node[:headRefName])
-        )
-      end
-
-      ci_statuses = nodes.to_h do |node|
-        rollup_state = node.dig(:commits, :nodes, 0, :commit, :statusCheckRollup, :state)
-        status = case rollup_state
-        when "SUCCESS" then :green
-        when "PENDING" then :pending_clean
-        when "FAILURE", "ERROR" then :failed
-        else :unknown
-        end
-        [node[:number], status]
-      end
+      prs = nodes.map { |node| graphql_node_to_pr(node) }
+      ci_statuses = nodes.to_h { |node| [node[:number], graphql_node_to_status(node)] }
 
       { prs: prs, ci_statuses: ci_statuses }
+    end
+
+    # Fetch a single PR with CI status in one GraphQL call (for skeleton cache miss)
+    def pull_request_with_status(pr_number)
+      query = <<~GRAPHQL
+        query($owner: String!, $name: String!, $number: Int!) {
+          repository(owner: $owner, name: $name) {
+            pullRequest(number: $number) {
+              number
+              title
+              url
+              updatedAt
+              headRefName
+              headRefOid
+              author { login }
+              commits(last: 1) {
+                nodes {
+                  commit {
+                    statusCheckRollup {
+                      state
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      GRAPHQL
+
+      owner, name = REPO.split("/")
+      result = graphql_request(query, owner: owner, name: name, number: pr_number)
+      node = result.dig(:data, :repository, :pullRequest)
+      return nil unless node
+
+      pr = graphql_node_to_pr(node)
+      ci = graphql_node_to_status(node)
+      { pr: pr, ci_status: ci }
     end
 
     def ci_status(sha)
@@ -441,6 +442,44 @@ module Bells
           FileUtils.mkdir_p(File.dirname(extract_path))
           entry.extract(extract_path) { true }
         end
+      end
+    end
+
+    def graphql_request(query, **variables)
+      conn = Faraday.new(url: "https://api.github.com")
+      response = conn.post("/graphql") do |req|
+        req.headers["Authorization"] = "Bearer #{@token}" if @token
+        req.headers["Content-Type"] = "application/json"
+        req.body = { query: query, variables: variables }.to_json
+      end
+
+      data = JSON.parse(response.body, symbolize_names: true)
+
+      if data[:errors]
+        warn "GraphQL errors: #{data[:errors].map { |e| e[:message] }.join(', ')}"
+      end
+
+      data
+    end
+
+    def graphql_node_to_pr(node)
+      OpenStruct.new(
+        number: node[:number],
+        title: node[:title],
+        html_url: node[:url],
+        updated_at: Time.parse(node[:updatedAt]),
+        user: OpenStruct.new(login: node.dig(:author, :login) || "unknown"),
+        head: OpenStruct.new(sha: node[:headRefOid], ref: node[:headRefName])
+      )
+    end
+
+    def graphql_node_to_status(node)
+      rollup_state = node.dig(:commits, :nodes, 0, :commit, :statusCheckRollup, :state)
+      case rollup_state
+      when "SUCCESS" then :green
+      when "PENDING" then :pending_clean
+      when "FAILURE", "ERROR" then :failed
+      else :unknown
       end
     end
 

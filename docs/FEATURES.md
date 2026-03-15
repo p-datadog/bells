@@ -126,13 +126,16 @@ PR detail pages use Server-Sent Events (SSE) to progressively update the UI as a
 
 ## GitHub API Integration
 
-Two API strategies: GraphQL for the homepage (bulk fetch), REST for PR detail pages (granular operations).
+Two API strategies: GraphQL for PR + CI status fetching, REST for granular CI operations.
 
-**GraphQL (Homepage):**
+**GraphQL:**
 
-`pull_requests_with_status` fetches all open PRs with CI status in a single query via `POST /graphql`. Used by the homepage route and background refresher.
+Used wherever we need PR metadata + CI status together:
 
-Query fetches per PR: `number`, `title`, `url`, `updatedAt`, `headRefName`, `headRefOid`, `author.login`, and `commits(last:1).commit.statusCheckRollup.state`.
+- `pull_requests_with_status` — Fetches all open PRs with CI status in one query. Used by homepage route and background refresher. Replaces N+1 REST calls (1 `pull_requests` + N `combined_status`) with 1 GraphQL call.
+- `pull_request_with_status(pr_number)` — Fetches a single PR with CI status in one query. Used by PR detail skeleton on cache miss. Replaces 2 REST calls (`pull_request` + `combined_status`) with 1 GraphQL call. Falls back to REST on failure.
+
+Query fields per PR: `number`, `title`, `url`, `updatedAt`, `headRefName`, `headRefOid`, `author.login`, and `commits(last:1).commit.statusCheckRollup.state`.
 
 Status mapping from GraphQL `StatusState` enum:
 - `SUCCESS` → `:green`
@@ -140,20 +143,19 @@ Status mapping from GraphQL `StatusState` enum:
 - `FAILURE` / `ERROR` → `:failed`
 - `null` or other → `:unknown`
 
-Returns `{ prs: [OpenStruct], ci_statuses: { number => symbol } }` — PR objects match the shape of REST PR objects so callers don't need to distinguish.
+PR objects returned as OpenStruct matching the REST PR shape so callers don't need to distinguish.
 
-Replaces N+1 REST calls (1 `pull_requests` + N `combined_status`) with 1 GraphQL call.
+**REST (PR Analysis):**
 
-**REST (PR Detail):**
-
-PR analysis uses REST endpoints with ETag caching:
+Used for detailed CI data that GraphQL can't efficiently provide (paginated check runs with 462 items, job logs, artifacts):
 - `check_runs_for_ref` — paginated, ETag cached on first page (304 returns full cached result)
 - `statuses` — paginated, ETag cached on first page
-- `combined_status` — single call for CI badge on PR detail skeleton
 - `workflow_run_artifacts` — for JUnit artifact downloads
 - `actions/jobs/{id}/logs` — for infrastructure failure detection, cached to disk
 
 All REST calls use the global `ETAG_CACHE` singleton for conditional requests.
+
+**Why not GraphQL for check runs?** GitHub GraphQL paginates check runs at 100/page (same as REST). With 462 check runs, we'd still need 5 queries. ETag caching on the REST endpoint already short-circuits with 304 when data hasn't changed, which is more efficient than re-fetching via GraphQL.
 
 ## Performance Optimizations
 
@@ -215,7 +217,8 @@ Total: 57ms server + ~650ms network/browser = ~700ms perceived
 - `Bells::BackgroundRefresher` - Async task that:
   - Warms PR list cache every 2 minutes
   - Caches each PR individually (reusable by user requests)
-  - Pre-warms full PR analysis for default author's PRs (if `BELLS_DEFAULT_AUTHOR` set)
+  - Pre-warms full PR analysis for default author's non-green PRs (if `BELLS_DEFAULT_AUTHOR` set)
+  - Skips pre-warming for green PRs (no failures to analyze)
   - Downloads artifacts, job logs, and test details in background
   - Uses exponential backoff on failures
 

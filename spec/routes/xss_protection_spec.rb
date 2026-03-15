@@ -73,8 +73,9 @@ RSpec.describe "XSS Protection" do
 
     before do
       allow(Bells::GitHubClient).to receive(:new).and_return(mock_client)
-      allow(mock_client).to receive(:pull_request).with(999).and_return(xss_pr)
-      allow(mock_client).to receive(:ci_status).with("abc123").and_return(:failed)
+      allow(mock_client).to receive(:pull_request_with_status).with(999).and_return({
+        pr: xss_pr, ci_status: :failed
+      })
       allow(Bells).to receive(:analyze_pr).with(999, anything).and_return(
         categorized_failures: { tests: [mock_job] },
         meta_failures: nil,

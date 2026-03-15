@@ -78,28 +78,33 @@ get "/pr/:number" do
   @pr_number = params[:number].to_i
 
   client = Bells::GitHubClient.new
-  puts "[MAIN ROUTE TIMING] #{((Time.now - start_time) * 1000).to_i}ms - GitHubClient initialized"
 
   # Try cache first (background refresh populates this)
-  pr = PR_CACHE.fetch("pr:#{@pr_number}") do
-    client.pull_request(@pr_number)
+  cached_pr = PR_CACHE.fetch("pr:#{@pr_number}") { nil }
+  pr_data = PR_CACHE.fetch("pr_list") { nil }
+  cached_ci = pr_data&.dig(:ci_statuses, @pr_number)
+
+  if cached_pr && cached_ci
+    # Both cached — no API calls
+    pr = cached_pr
+    @ci_status = cached_ci
+  else
+    # Cache miss — single GraphQL call for PR + CI status (1 call instead of 2)
+    result = client.pull_request_with_status(@pr_number)
+    if result
+      pr = result[:pr]
+      @ci_status = result[:ci_status]
+      PR_CACHE.set("pr:#{@pr_number}", pr)
+    else
+      # GraphQL failed, fall back to REST
+      pr = client.pull_request(@pr_number)
+      @ci_status = cached_ci || client.ci_status(pr.head.sha)
+    end
   end
-  cache_source = PR_CACHE.fetch("pr:#{@pr_number}") { nil } ? "cache" : "API"
-  puts "[MAIN ROUTE TIMING] #{((Time.now - start_time) * 1000).to_i}ms - PR fetched (from #{cache_source})"
 
   @pr_title = pr.title
   @pr_author = pr.user.login
   @pr_head_sha = pr.head.sha
-
-  # Try to use cached CI status from homepage (background refresh)
-  pr_data = PR_CACHE.fetch("pr_list") { nil }
-  @ci_status = if pr_data && pr_data[:ci_statuses] && pr_data[:ci_statuses][@pr_number]
-    pr_data[:ci_statuses][@pr_number]
-  else
-    # Fallback: compute CI status (limited to 100 check runs)
-    client.ci_status(@pr_head_sha)
-  end
-  puts "[MAIN ROUTE TIMING] #{((Time.now - start_time) * 1000).to_i}ms - CI status retrieved (#{@ci_status}, from #{pr_data ? 'cache' : 'API'})"
 
   # Use streaming in development/production, not in tests
   @use_streaming = settings.environment != :test

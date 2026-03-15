@@ -21,8 +21,9 @@ RSpec.describe "PR Streaming Routes" do
 
     before do
       allow(Bells::GitHubClient).to receive(:new).and_return(mock_client)
-      allow(mock_client).to receive(:pull_request).with(123).and_return(mock_pr)
-      allow(mock_client).to receive(:ci_status).with("abc123").and_return(:green)
+      allow(mock_client).to receive(:pull_request_with_status).with(123).and_return({
+        pr: mock_pr, ci_status: :green
+      })
     end
 
     it "streams events for PR analysis" do
@@ -89,8 +90,9 @@ RSpec.describe "PR Streaming Routes" do
       )
 
       allow(Bells::GitHubClient).to receive(:new).and_return(mock_client)
-      allow(mock_client).to receive(:pull_request).with(123).and_return(mock_pr)
-      allow(mock_client).to receive(:ci_status).with("abc123").and_return(:green)
+      allow(mock_client).to receive(:pull_request_with_status).with(123).and_return({
+        pr: mock_pr, ci_status: :green
+      })
 
       get "/pr/123"
 

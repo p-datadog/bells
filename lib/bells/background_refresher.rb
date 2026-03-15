@@ -114,15 +114,17 @@ module Bells
 
       puts "[#{Time.now}] Background refresh: Complete (#{prs.size} PRs, #{ci_statuses.size} statuses, cached #{prs.size} individual PRs)"
 
-      # Pre-warm PR analysis for default author's PRs
+      # Pre-warm PR analysis for default author's non-green PRs
       if @default_author
         author_prs = prs.select { |pr| pr.user.login == @default_author }
+        non_green = author_prs.reject { |pr| ci_statuses[pr.number] == :green }
+        skipped = author_prs.size - non_green.size
 
         if author_prs.any?
-          puts "[#{Time.now}] Background refresh: Pre-warming #{author_prs.size} PRs for author #{@default_author}..."
+          puts "[#{Time.now}] Background refresh: Pre-warming #{non_green.size} PRs for #{@default_author} (#{skipped} green, skipped)..."
 
           warm_start = Time.now
-          author_prs.each do |pr|
+          non_green.each do |pr|
             warm_pr_analysis(pr.number, pr)
           end
           warm_duration = Time.now - warm_start
