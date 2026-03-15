@@ -27,6 +27,7 @@ RSpec.describe "Bells.analyze_pr_streaming" do
     allow(mock_client).to receive(:in_progress_jobs_for_pr).and_return([])
     allow(mock_client).to receive(:failed_statuses_for_pr).and_return([])
     allow(mock_client).to receive(:passed_statuses_for_pr).and_return([])
+    allow(mock_client).to receive(:pending_statuses_for_pr).and_return([])
     allow(mock_client).to receive(:download_junit_artifacts).and_return({
       artifact_dirs: [],
       errors: []

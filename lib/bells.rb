@@ -72,6 +72,7 @@ module Bells
       # Also fetch commit statuses (GitLab CI)
       failed_statuses = client.failed_statuses_for_pr(pr_number, pr: pr)
       passed_statuses = client.passed_statuses_for_pr(pr_number, pr: pr)
+      pending_statuses = client.pending_statuses_for_pr(pr_number, pr: pr)
 
       # Categorize both check runs and commit statuses
       job_failures = categorizer.categorize_jobs(failed_jobs, github_client: client)
@@ -117,7 +118,7 @@ module Bells
         meta_failures: meta_failures,
         test_details: test_summary,
         total_failed_jobs: failed_jobs.size + failed_statuses.size,
-        in_progress_jobs: in_progress_jobs.size,
+        in_progress_jobs: in_progress_jobs.size + pending_statuses.size,
         passed_jobs: passed_jobs.size + passed_statuses.size,
         auto_restarted: auto_restarted,
         download_errors: download_errors
@@ -209,12 +210,13 @@ module Bells
       # Also fetch commit statuses (GitLab CI)
       failed_statuses = client.failed_statuses_for_pr(pr_number, pr: pr)
       passed_statuses = client.passed_statuses_for_pr(pr_number, pr: pr)
-      log_timing.call("Jobs filtered (#{failed_jobs.size} failed, #{in_progress_jobs.size} in progress, #{passed_jobs.size} passed) + #{failed_statuses.size} failed statuses + #{passed_statuses.size} passed statuses")
+      pending_statuses = client.pending_statuses_for_pr(pr_number, pr: pr)
+      log_timing.call("Jobs filtered (#{failed_jobs.size} failed, #{in_progress_jobs.size} in progress, #{passed_jobs.size} passed) + #{failed_statuses.size} failed statuses + #{passed_statuses.size} passed statuses + #{pending_statuses.size} pending statuses")
 
       # Send job list event
       yield(:job_list, {
         failed_jobs: failed_jobs.size + failed_statuses.size,
-        in_progress: in_progress_jobs.size,
+        in_progress: in_progress_jobs.size + pending_statuses.size,
         passed_jobs: passed_jobs.size + passed_statuses.size,
         failed_job_names: failed_jobs.map(&:name) + failed_statuses.map(&:context)
       })
@@ -282,7 +284,7 @@ module Bells
           meta_failures: meta_failures,
           test_details: { total_failures: 0, unique_tests: 0, flaky_tests: 0, aggregated: [] },
           total_failed_jobs: 0,
-          in_progress_jobs: in_progress_jobs.size,
+          in_progress_jobs: in_progress_jobs.size + pending_statuses.size,
           passed_jobs: passed_jobs.size + passed_statuses.size,
           auto_restarted: auto_restarted,
           download_errors: []
@@ -334,7 +336,7 @@ module Bells
         meta_failures: meta_failures,
         test_details: test_summary,
         total_failed_jobs: failed_jobs.size + failed_statuses.size,
-        in_progress_jobs: in_progress_jobs.size,
+        in_progress_jobs: in_progress_jobs.size + pending_statuses.size,
         passed_jobs: passed_jobs.size + passed_statuses.size,
         auto_restarted: auto_restarted,
         download_errors: download_errors

@@ -165,6 +165,11 @@ module Bells
       statuses.select { |status| status.state == "success" }
     end
 
+    def pending_statuses_for_pr(pr_number, pr: nil)
+      statuses = commit_statuses_for_pr(pr_number, pr: pr)
+      statuses.select { |status| status.state == "pending" }
+    end
+
     def job_logs(job_id, cache_dir: ".cache")
       # Check cache first
       cache_path = File.join(cache_dir, "logs", "#{job_id}.log")
