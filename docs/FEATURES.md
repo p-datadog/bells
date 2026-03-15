@@ -22,8 +22,10 @@ Analyze CI failures in dd-trace-rb pull requests, grouped by category.
 - Pending (failing) - In progress, some already failed
 - Failed - Completed with failures
 
+Both GitHub Actions check runs and GitLab CI commit statuses are tracked. Pending commit statuses (e.g. `dd-gitlab/finishedExpected`) are included in the in-progress count.
+
 **Failure Categories:**
-- Meta - all-jobs-are-green (meta-check that waits for other jobs)
+- Meta - all-jobs-are-green (GitHub Actions), dd-gitlab/default-pipeline (GitLab CI) — meta-checks that wait for other jobs
 - Infrastructure - GitHub Actions/API failures, runner issues, network problems (detected by analyzing job logs)
 - Type Check - steep/typecheck, type checking jobs
 - Lint - rubocop, standard, actionlint, yaml-lint
@@ -33,13 +35,13 @@ Analyze CI failures in dd-trace-rb pull requests, grouped by category.
 - Uncategorized - anything else
 
 **Components:**
-- `Bells::GitHubClient` - Fetches workflow runs, CI status, failed jobs, JUnit artifacts, and job logs. Includes restart_job method.
+- `Bells::GitHubClient` - Fetches workflow runs, CI status, failed/passed/pending jobs and statuses, JUnit artifacts, and job logs. Includes restart_job method and GraphQL-based `pull_requests_with_status` for homepage.
 - `Bells::FailureCategorizer` - Categorizes failed jobs by type. Analyzes job logs to detect infrastructure failures (GitHub API errors, runner issues, network problems) that take precedence over name-based categorization.
 - `Bells::JunitParser` - Parses JUnit XML files to extract all test results (passes and failures)
 - `Bells::FailureAggregator` - Groups test results and detects true flaky tests (tests that both pass and fail in the same PR)
 
 **Auto-Restart:**
-When "all-jobs-are-green" is the only failing job, it's automatically restarted in the background. This meta-check often fails due to race conditions when it runs before other jobs complete. A notice is displayed on the PR analysis page when auto-restart occurs.
+When the only failing jobs are meta-checks (all-jobs-are-green, dd-gitlab/default-pipeline), the restartable GitHub Actions jobs are automatically restarted in the background. These meta-checks often fail due to race conditions when they run before other jobs complete. A notice is displayed on the PR analysis page when auto-restart occurs.
 
 **Configuration:**
 - `BELLS_DEFAULT_AUTHOR` - Optional environment variable to filter PRs by a specific author by default. When set:
@@ -86,9 +88,10 @@ BELLS_BACKGROUND_REFRESH=false bundle exec puma
 PR detail pages use Server-Sent Events (SSE) to progressively update the UI as analysis completes, reducing perceived load time by 95%.
 
 **User Experience:**
-- Skeleton renders immediately (~700ms) with PR title, author, and CI status
+- Skeleton renders immediately (~700ms) with PR title, author, CI status, and loading placeholders
+- Loading placeholders match the final card layout (muted text) to minimize flicker on content swap
 - Content sections populate via SSE as data becomes available
-- Passing PRs (ci_status=:green): All sections populate instantly (~30ms)
+- Passing PRs (ci_status=:green): All sections populate instantly (~30ms), no API calls
 - Failing PRs: Progressive updates as analysis completes (1s → 2s → 10s)
 - Cached PRs: All data instant (<100ms)
 
@@ -100,7 +103,7 @@ PR detail pages use Server-Sent Events (SSE) to progressively update the UI as a
 - Fallback: Meta refresh for browsers without JavaScript (non-streaming mode in test environment)
 
 **Events Streamed:**
-1. `job_list` - Failed/passed/in-progress job counts (~1s, or instant if ci_status=:green)
+1. `job_list` - Failed/passed/in-progress job counts, including pending commit statuses (~1s, or instant if ci_status=:green)
 2. `categorized_failures_initial` - Name-based categorization without log downloads (~1s, instant)
 3. `categorized_failures_final` - Updated categorization with infrastructure detection (~2s after parallel log downloads)
 4. `test_details` - Full JUnit test analysis (~10s after artifact downloads and parsing, or instant if no failures)
