@@ -29,7 +29,7 @@ module Bells
           refresh_pr_cache
           @consecutive_failures = 0
         rescue => e
-          warn "Background refresh error: #{e.class}: #{e}"
+          warn "Background refresh error: #{e.class}: #{e.message.lines.first&.chomp}"
           warn e.backtrace.first(5).map { |l| "  #{l}" }.join("\n")
           @consecutive_failures += 1
         end
@@ -59,7 +59,7 @@ module Bells
             refresh_pr_cache
             @consecutive_failures = 0
           rescue => e
-            warn "Background refresh error: #{e.class}: #{e}"
+            warn "Background refresh error: #{e.class}: #{e.message.lines.first&.chomp}"
             warn e.backtrace.first(5).map { |l| "  #{l}" }.join("\n")
             @consecutive_failures += 1
             backoff = [@interval * (2 ** [@consecutive_failures - 1, 3].min), @max_backoff].min
@@ -89,7 +89,7 @@ module Bells
       begin
         client = GitHubClient.new
       rescue => e
-        warn "[#{Time.now}] Background refresh: Failed to initialize GitHub client: #{e.class}: #{e}"
+        warn "[#{Time.now}] Background refresh: Failed to initialize GitHub client: #{e.class}: #{e.message.lines.first&.chomp}"
         warn e.backtrace.first(5).map { |l| "  #{l}" }.join("\n")
         raise
       end
@@ -99,7 +99,7 @@ module Bells
         prs = pr_data[:prs]
         ci_statuses = pr_data[:ci_statuses]
       rescue => e
-        warn "[#{Time.now}] Background refresh: GitHub API error: #{e.class}: #{e}"
+        warn "[#{Time.now}] Background refresh: GitHub API error: #{e.class}: #{e.message.lines.first&.chomp}"
         warn e.backtrace.first(5).map { |l| "  #{l}" }.join("\n")
         raise
       end
@@ -143,7 +143,7 @@ module Bells
       puts "[#{Time.now}]   ✓ Warmed PR ##{pr_number} (%.2fs)" % duration
     rescue => e
       duration = Time.now - start_time
-      warn "[#{Time.now}]   ✗ Failed to warm PR ##{pr_number} (#{"%.2f" % duration}s): #{e.class}: #{e}"
+      warn "[#{Time.now}]   ✗ Failed to warm PR ##{pr_number} (#{"%.2f" % duration}s): #{e.class}: #{e.message.lines.first&.chomp}"
       warn e.backtrace.first(5).map { |l| "  #{l}" }.join("\n")
       # Don't raise - continue with other PRs
     end

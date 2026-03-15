@@ -175,4 +175,97 @@ RSpec.describe Bells::GitHubClient do
       expect(result[:artifact_dirs]).to include(".cache/123/1003_junit")
     end
   end
+
+  describe "#commit_statuses_for_pr" do
+    let(:octokit_client) { instance_double(Octokit::Client) }
+    let(:pr) { OpenStruct.new(number: 42, head: OpenStruct.new(sha: "deadbeef", ref: "my-branch")) }
+    let(:status1) { OpenStruct.new(context: "ci/gitlab", state: "success", target_url: "https://gitlab.example.com/1") }
+    let(:status2) { OpenStruct.new(context: "ci/circleci", state: "failure", target_url: "https://circleci.example.com/2") }
+    let(:no_next_rels) { { next: nil } }
+
+    before do
+      allow(Octokit::Client).to receive(:new).and_return(octokit_client)
+      allow(octokit_client).to receive(:auto_paginate=)
+      allow(octokit_client).to receive(:auto_paginate).and_return(false)
+    end
+
+    context "when all statuses fit on one page" do
+      let(:last_response) { OpenStruct.new(status: 200, headers: { "etag" => '"etag1"' }, rels: no_next_rels) }
+
+      before do
+        allow(octokit_client).to receive(:statuses).and_return([status1, status2])
+        allow(octokit_client).to receive(:last_response).and_return(last_response)
+        allow(octokit_client).to receive(:pull_request).and_return(pr)
+      end
+
+      it "returns deduplicated statuses" do
+        result = client.commit_statuses_for_pr(42, pr: pr)
+        expect(result).to include(status1, status2)
+      end
+    end
+
+    context "when statuses span multiple pages" do
+      let(:page2_status) { OpenStruct.new(context: "ci/travis", state: "success", target_url: "https://travis.example.com/3") }
+      let(:next_rel) { OpenStruct.new(href: "https://api.github.com/repos/DataDog/dd-trace-rb/statuses/deadbeef?page=2") }
+      let(:first_last_response) { OpenStruct.new(status: 200, headers: { "etag" => '"etag1"' }, rels: { next: next_rel }) }
+      let(:second_last_response) { OpenStruct.new(status: 200, headers: { "etag" => nil }, rels: no_next_rels) }
+
+      before do
+        allow(octokit_client).to receive(:statuses).and_return([status1])
+        # last_response is called 4 times: initial capture, while-check, href access, loop-exit check
+        allow(octokit_client).to receive(:last_response).and_return(
+          first_last_response, first_last_response, first_last_response, second_last_response
+        )
+        allow(octokit_client).to receive(:get).and_return([page2_status])
+        allow(octokit_client).to receive(:pull_request).and_return(pr)
+      end
+
+      it "concatenates pages without calling .data on the response" do
+        result = client.commit_statuses_for_pr(42, pr: pr)
+        expect(result).to include(status1, page2_status)
+      end
+
+      it "does not raise ArgumentError when paginating" do
+        expect { client.commit_statuses_for_pr(42, pr: pr) }.not_to raise_error
+      end
+    end
+
+    context "when result is cached (304 Not Modified)" do
+      let(:cached_statuses) { [status1] }
+      let(:last_response) { OpenStruct.new(status: 304, headers: { "etag" => '"etag1"' }, rels: no_next_rels) }
+
+      before do
+        etag_cache = client.instance_variable_get(:@etag_cache)
+        etag_cache.instance_variable_get(:@cache)["statuses:deadbeef"] =
+          Bells::ETagCache::CachedData.new(data: cached_statuses, etag: '"etag1"', created_at: Time.now)
+
+        allow(octokit_client).to receive(:statuses).and_return([])
+        allow(octokit_client).to receive(:last_response).and_return(last_response)
+        allow(octokit_client).to receive(:pull_request).and_return(pr)
+      end
+
+      it "returns cached data" do
+        result = client.commit_statuses_for_pr(42, pr: pr)
+        expect(result).to eq(cached_statuses)
+      end
+    end
+
+    context "when statuses have duplicate contexts" do
+      let(:status1_newer) { OpenStruct.new(context: "ci/gitlab", state: "pending", target_url: "https://gitlab.example.com/newer") }
+      let(:last_response) { OpenStruct.new(status: 200, headers: { "etag" => '"etag1"' }, rels: no_next_rels) }
+
+      before do
+        allow(octokit_client).to receive(:statuses).and_return([status1_newer, status1])
+        allow(octokit_client).to receive(:last_response).and_return(last_response)
+        allow(octokit_client).to receive(:pull_request).and_return(pr)
+      end
+
+      it "keeps the first (most recent) status per context" do
+        result = client.commit_statuses_for_pr(42, pr: pr)
+        gitlab_statuses = result.select { |s| s.context == "ci/gitlab" }
+        expect(gitlab_statuses.size).to eq(1)
+        expect(gitlab_statuses.first).to eq(status1_newer)
+      end
+    end
+  end
 end

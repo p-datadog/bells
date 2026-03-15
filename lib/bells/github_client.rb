@@ -249,7 +249,7 @@ module Bells
           all_statuses = response.dup
           while @client.last_response.rels[:next]
             response = @client.get(@client.last_response.rels[:next].href)
-            all_statuses.concat(response.data)
+            all_statuses.concat(response)
           end
 
           # Group by context and take the first (latest) status for each
