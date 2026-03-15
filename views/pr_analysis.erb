@@ -189,7 +189,8 @@
   function renderMetaFailures(failures) {
     let html = '<div class="card" style="opacity: 0.7;">';
     html += '<h2>Also Failed</h2>';
-    html += '<p style="margin-bottom: 10px;"><small>The meta-check job also failed, but this is expected when other jobs fail:</small></p>';
+    const jobWord = failures.length === 1 ? 'job' : 'jobs';
+    html += '<p style="margin-bottom: 10px;"><small>These meta-check ' + jobWord + ' also failed, but this is expected when other jobs fail:</small></p>';
     html += '<table><thead><tr><th>Job</th><th></th></tr></thead><tbody>';
 
     failures.forEach(function(failure) {
@@ -391,7 +392,7 @@
 <% if @results[:meta_failures] %>
 <div class="card" style="opacity: 0.7;">
   <h2>Also Failed</h2>
-  <p style="margin-bottom: 10px;"><small>The meta-check job also failed, but this is expected when other jobs fail:</small></p>
+  <p style="margin-bottom: 10px;"><small>These meta-check <%= @results[:meta_failures].size == 1 ? 'job' : 'jobs' %> also failed, but this is expected when other jobs fail:</small></p>
   <table>
     <thead>
       <tr>
