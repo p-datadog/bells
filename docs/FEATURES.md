@@ -86,24 +86,25 @@ BELLS_BACKGROUND_REFRESH=false bundle exec puma
 PR detail pages use Server-Sent Events (SSE) to progressively update the UI as analysis completes, reducing perceived load time by 95%.
 
 **User Experience:**
-- Page renders immediately (600ms) with PR title, author, and CI status
-- Loading spinners show progress for: job list, categorized failures, test details
-- Sections populate as data becomes available (1.2s → 3.7s → 12s)
-- Cached PRs show all data instantly (<100ms)
+- Skeleton renders immediately (~700ms) with PR title, author, and CI status
+- Content sections populate via SSE as data becomes available
+- Passing PRs (ci_status=:green): All sections populate instantly (~30ms)
+- Failing PRs: Progressive updates as analysis completes (1s → 2s → 10s)
+- Cached PRs: All data instant (<100ms)
 
 **Implementation:**
-- `/pr/:number` - Renders skeleton page with loading spinners
-- `/pr/:number/stream` - SSE endpoint streaming analysis events
-- JavaScript client connects to SSE, updates DOM incrementally
-- Fallback: Meta refresh for browsers without JavaScript
+- `/pr/:number` - Renders skeleton page immediately with PR title, author, CI status badge
+- `/pr/:number/stream?ci_status=<status>` - SSE endpoint streaming analysis events
+- JavaScript client connects to SSE, updates DOM incrementally as events arrive
+- ci_status parameter enables green PR optimization (skip expensive operations)
+- Fallback: Meta refresh for browsers without JavaScript (non-streaming mode in test environment)
 
 **Events Streamed:**
-1. `pr_basic` - PR number, title, author (immediate)
-2. `ci_status` - CI badge status (immediate)
-3. `job_list` - Failed/passed/in-progress job counts (1.2s)
-4. `categorized_failures` - Categorized job failures with restart buttons (3.7s)
-5. `test_details` - Full JUnit test analysis (12s)
-6. `complete` - Analysis finished, close connection
+1. `job_list` - Failed/passed/in-progress job counts (~1s, or instant if ci_status=:green)
+2. `categorized_failures_initial` - Name-based categorization without log downloads (~1s, instant)
+3. `categorized_failures_final` - Updated categorization with infrastructure detection (~2s after parallel log downloads)
+4. `test_details` - Full JUnit test analysis (~10s after artifact downloads and parsing, or instant if no failures)
+5. `complete` - Analysis finished, close connection
 
 **Performance:**
 - First visit (cold cache): 600ms perceived load (vs 12s blocking)
