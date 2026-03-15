@@ -25,6 +25,8 @@ RSpec.describe "Bells.analyze_pr_streaming" do
     allow(mock_client).to receive(:check_runs_for_pr).and_return([])
     allow(mock_client).to receive(:failed_jobs_for_pr).and_return([])
     allow(mock_client).to receive(:in_progress_jobs_for_pr).and_return([])
+    allow(mock_client).to receive(:failed_statuses_for_pr).and_return([])
+    allow(mock_client).to receive(:passed_statuses_for_pr).and_return([])
     allow(mock_client).to receive(:download_junit_artifacts).and_return({
       artifact_dirs: [],
       errors: []
@@ -32,6 +34,7 @@ RSpec.describe "Bells.analyze_pr_streaming" do
     allow(mock_parser).to receive(:parse_directory_failures_only).and_return([])
     allow(mock_parser).to receive(:parse_directory_for_tests).and_return([])
     allow(mock_categorizer).to receive(:categorize_jobs).and_return([])
+    allow(mock_categorizer).to receive(:categorize_statuses).and_return([])
     allow(mock_categorizer).to receive(:group_by_category).and_return({})
     allow(mock_aggregator).to receive(:summary).and_return(
       total_failures: 0,

@@ -53,7 +53,7 @@ RSpec.describe "Bells.atomic_write" do
 
     expect {
       Bells.atomic_write(test_file, "content")
-    }.to raise_error
+    }.to raise_error(Errno::EACCES)
 
     # Check no .part.* files remain
     part_files = Dir.glob("#{test_file}.part.*")
