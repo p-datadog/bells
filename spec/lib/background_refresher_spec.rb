@@ -113,6 +113,44 @@ RSpec.describe Bells::BackgroundRefresher do
     end
   end
 
+  describe "#warm_pr_analysis" do
+    let(:refresher) { described_class.new(cache, interval: 120, default_author: "testuser") }
+
+    it "calls Bells.analyze_pr with the pr number and pr object" do
+      expect(Bells).to receive(:analyze_pr).with(123, pr: mock_pr)
+      refresher.send(:warm_pr_analysis, 123, mock_pr)
+    end
+
+    it "does not raise when Bells.analyze_pr raises a plain exception" do
+      allow(Bells).to receive(:analyze_pr).and_raise("something went wrong")
+      expect { refresher.send(:warm_pr_analysis, 123, mock_pr) }.not_to raise_error
+    end
+
+    it "does not raise when exception message contains % characters (e.g. URL-encoded)" do
+      error = RuntimeError.new("GET https://api.github.com/repos/%5Bbot%5D/status returned 404 %28Not Found%29")
+      allow(Bells).to receive(:analyze_pr).and_raise(error)
+      expect { refresher.send(:warm_pr_analysis, 123, mock_pr) }.not_to raise_error
+    end
+
+    it "does not raise when exception message contains %s or %d format specifiers" do
+      error = RuntimeError.new("too many %s and %d in message")
+      allow(Bells).to receive(:analyze_pr).and_raise(error)
+      expect { refresher.send(:warm_pr_analysis, 123, mock_pr) }.not_to raise_error
+    end
+
+    it "continues warming subsequent PRs after one fails" do
+      pr2 = OpenStruct.new(number: 456, head: OpenStruct.new(sha: "def"))
+      analyzed = []
+      allow(Bells).to receive(:analyze_pr) do |pr_number, **|
+        analyzed << pr_number
+        raise "fail" if pr_number == 123
+      end
+      refresher.send(:warm_pr_analysis, 123, mock_pr)
+      refresher.send(:warm_pr_analysis, 456, pr2)
+      expect(analyzed).to eq([123, 456])
+    end
+  end
+
   describe "error handling" do
     it "recovers from GitHubClient initialization failures" do
       allow(Bells::GitHubClient).to receive(:new).and_raise("Init error")
