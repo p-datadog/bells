@@ -175,6 +175,24 @@ RSpec.describe Bells::FailureCategorizer do
     end
   end
 
+  describe "#categorize_status" do
+    def mock_status(context)
+      OpenStruct.new(context: context, target_url: "https://gitlab.example.com", description: "failed", state: "failure")
+    end
+
+    it "categorizes dd-gitlab/default-pipeline as meta check" do
+      status = mock_status("dd-gitlab/default-pipeline")
+      result = categorizer.categorize_status(status)
+      expect(result.category).to eq(:meta)
+    end
+
+    it "does not categorize other dd-gitlab statuses as meta" do
+      status = mock_status("dd-gitlab/compute_pipeline")
+      result = categorizer.categorize_status(status)
+      expect(result.category).not_to eq(:meta)
+    end
+  end
+
   describe "#categorize_jobs" do
     it "categorizes multiple jobs" do
       jobs = [
