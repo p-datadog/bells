@@ -69,10 +69,11 @@ module Bells
       in_progress_jobs = client.in_progress_jobs_for_pr(pr_number, pr: pr, check_runs: check_runs)
       passed_jobs = check_runs.select { |run| run.conclusion == "success" }
 
-      # Also fetch commit statuses (GitLab CI)
-      failed_statuses = client.failed_statuses_for_pr(pr_number, pr: pr)
-      passed_statuses = client.passed_statuses_for_pr(pr_number, pr: pr)
-      pending_statuses = client.pending_statuses_for_pr(pr_number, pr: pr)
+      # Also fetch commit statuses (GitLab CI) — single fetch, filter locally
+      all_statuses = client.commit_statuses_for_pr(pr_number, pr: pr)
+      failed_statuses = all_statuses.select { |s| s.state == "failure" || s.state == "error" }
+      passed_statuses = all_statuses.select { |s| s.state == "success" }
+      pending_statuses = all_statuses.select { |s| s.state == "pending" }
 
       # Categorize both check runs and commit statuses
       job_failures = categorizer.categorize_jobs(failed_jobs, github_client: client)
@@ -207,10 +208,11 @@ module Bells
       in_progress_jobs = client.in_progress_jobs_for_pr(pr_number, pr: pr, check_runs: check_runs)
       passed_jobs = check_runs.select { |run| run.conclusion == "success" }
 
-      # Also fetch commit statuses (GitLab CI)
-      failed_statuses = client.failed_statuses_for_pr(pr_number, pr: pr)
-      passed_statuses = client.passed_statuses_for_pr(pr_number, pr: pr)
-      pending_statuses = client.pending_statuses_for_pr(pr_number, pr: pr)
+      # Also fetch commit statuses (GitLab CI) — single fetch, filter locally
+      all_statuses = client.commit_statuses_for_pr(pr_number, pr: pr)
+      failed_statuses = all_statuses.select { |s| s.state == "failure" || s.state == "error" }
+      passed_statuses = all_statuses.select { |s| s.state == "success" }
+      pending_statuses = all_statuses.select { |s| s.state == "pending" }
       log_timing.call("Jobs filtered (#{failed_jobs.size} failed, #{in_progress_jobs.size} in progress, #{passed_jobs.size} passed) + #{failed_statuses.size} failed statuses + #{passed_statuses.size} passed statuses + #{pending_statuses.size} pending statuses")
 
       # Send job list event
