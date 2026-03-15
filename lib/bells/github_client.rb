@@ -322,7 +322,7 @@ module Bells
 
       artifact_path
     rescue => e
-      error_msg = "Failed to download artifact #{artifact.name}: #{e.message}"
+      error_msg = "Failed to download artifact #{artifact.name}: #{e.class}: #{e}"
       warn error_msg
       @download_errors << error_msg if @download_errors
       FileUtils.rm_f(zip_path) if zip_path

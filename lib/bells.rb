@@ -362,7 +362,7 @@ module Bells
           puts "Auto-restarting meta-check job #{job.name} (#{job.id}) for PR #{pr_number}"
           client.restart_job(job.id)
         rescue => e
-          warn "Failed to restart job #{job.id}: #{e.message}"
+          warn "Failed to restart job #{job.id}: #{e.class}: #{e}"
         end
       end
       true
@@ -400,7 +400,7 @@ module Bells
       # Convert structs back
       deserialize_cached_analysis(cached)
     rescue => e
-      warn "Failed to load cache for PR #{pr_number}: #{e.message}"
+      warn "Failed to load cache for PR #{pr_number}: #{e.class}: #{e}"
       nil
     end
 
@@ -436,7 +436,7 @@ module Bells
 
       cached
     rescue => e
-      warn "Failed to load cache for PR #{pr_number}: #{e.message}"
+      warn "Failed to load cache for PR #{pr_number}: #{e.class}: #{e}"
       nil
     end
 
@@ -485,7 +485,7 @@ module Bells
 
       Bells.atomic_write(path, JSON.pretty_generate(serialized))
     rescue => e
-      warn "Failed to save cache for PR #{pr_number}: #{e.message}"
+      warn "Failed to save cache for PR #{pr_number}: #{e.class}: #{e}"
     end
   end
 end

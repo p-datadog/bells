@@ -168,7 +168,7 @@ module Bells
 
       { is_infrastructure: false }
     rescue => e
-      warn "Failed to check infrastructure failure for job #{job_id}: #{e.message}"
+      warn "Failed to check infrastructure failure for job #{job_id}: #{e.class}: #{e}"
       { is_infrastructure: false }
     end
 
