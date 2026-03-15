@@ -378,6 +378,43 @@ job_failures = threads.map(&:value)
 
 **Impact:** Prevents duplicate API calls for same resource
 
+### 10. ✅ GraphQL for Homepage PR List + CI Status (N+1 → 1 Call)
+
+**Problem:** Homepage fetched PR list (1 REST call) then CI status for each PR individually (N REST calls to `combined_status`). For 30 open PRs, that's 31 API calls taking ~6 seconds sequentially. Background refresher had the same problem.
+
+**Solution:** Use GitHub's GraphQL API to fetch PRs with `statusCheckRollup` in a single query.
+
+```ruby
+# Before: 31 REST API calls (1 + 30 sequential ci_status calls)
+prs = client.pull_requests                                    # 1 call
+ci_statuses = prs.to_h { |pr| [pr.number, client.ci_status(pr.head.sha)] }  # 30 calls
+
+# After: 1 GraphQL call returns PRs + CI status together
+pr_data = client.pull_requests_with_status  # 1 call, returns { prs:, ci_statuses: }
+```
+
+GraphQL query fetches: `number`, `title`, `url`, `updatedAt`, `headRefOid`, `author.login`, and `commits.commit.statusCheckRollup.state` for all open PRs in one request.
+
+**Impact:** 31 API calls (~6s) → 1 API call (~300ms). Reduces GitHub API rate limit consumption by 97%.
+
+**Trade-off:** GraphQL `statusCheckRollup` maps `SUCCESS`/`PENDING`/`FAILURE` to our `:green`/`:pending_clean`/`:failed` symbols. Same loss of `:pending_failing` distinction as `combined_status` (acceptable, documented in optimization #5).
+
+### 11. ✅ ETag Caching for check_runs and commit_statuses
+
+**Problem:** `check_runs_for_pr` and `commit_statuses_for_pr` used manual pagination without conditional requests. Every background refresh re-fetched all pages even when data hadn't changed.
+
+**Solution:** Wrap first-page fetch in `fetch_with_etag`. On 304 Not Modified, return cached full result without fetching any pages.
+
+**Impact:** Subsequent refreshes for unchanged PRs: 5-7 API calls → 1 conditional request returning 304.
+
+### 12. ✅ Single Fetch for Commit Statuses (3x → 1x)
+
+**Problem:** `failed_statuses_for_pr`, `passed_statuses_for_pr`, and `pending_statuses_for_pr` each called `commit_statuses_for_pr` independently, causing 3 full paginated API fetches per PR analysis.
+
+**Solution:** Call `commit_statuses_for_pr` once in the caller, filter locally.
+
+**Impact:** 3 paginated fetches → 1 per PR analysis.
+
 ---
 
 ## Combined Performance Results

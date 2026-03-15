@@ -30,8 +30,9 @@ RSpec.describe "PR Analysis Routes" do
 
     before do
       allow(Bells::GitHubClient).to receive(:new).and_return(mock_client)
-      allow(mock_client).to receive(:pull_requests).and_return([mock_pr])
-      allow(mock_client).to receive(:ci_status).with("abc123").and_return(:green)
+      allow(mock_client).to receive(:pull_requests_with_status).and_return({
+        prs: [mock_pr], ci_statuses: { 999 => :green }
+      })
     end
 
     it "renders the index page with PR list and CI status" do
@@ -74,8 +75,9 @@ RSpec.describe "PR Analysis Routes" do
 
       before do
         ENV["BELLS_DEFAULT_AUTHOR"] = "defaultuser"
-        allow(mock_client).to receive(:pull_requests).and_return([mock_pr, default_pr])
-        allow(mock_client).to receive(:ci_status).with("def456").and_return(:green)
+        allow(mock_client).to receive(:pull_requests_with_status).and_return({
+          prs: [mock_pr, default_pr], ci_statuses: { 999 => :green, 100 => :green }
+        })
       end
 
       after do

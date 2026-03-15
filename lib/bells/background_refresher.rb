@@ -95,8 +95,9 @@ module Bells
       end
 
       begin
-        prs = client.pull_requests
-        ci_statuses = prs.to_h { |pr| [pr.number, client.ci_status(pr.head.sha)] }
+        pr_data = client.pull_requests_with_status
+        prs = pr_data[:prs]
+        ci_statuses = pr_data[:ci_statuses]
       rescue => e
         warn "[#{Time.now}] Background refresh: GitHub API error: #{e.class}: #{e}"
         warn e.backtrace.first(5).map { |l| "  #{l}" }.join("\n")
@@ -109,7 +110,7 @@ module Bells
       end
 
       # Use set instead of fetch to avoid race condition
-      @cache.set("pr_list", { prs: prs, ci_statuses: ci_statuses }, ttl: @interval * 2)
+      @cache.set("pr_list", pr_data, ttl: @interval * 2)
 
       puts "[#{Time.now}] Background refresh: Complete (#{prs.size} PRs, #{ci_statuses.size} statuses, cached #{prs.size} individual PRs)"
 

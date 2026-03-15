@@ -131,21 +131,25 @@ Comprehensive caching and optimization reducing PR detail page load time by 98% 
 3. **Disk Layer** - Persistent file cache for analysis results, job logs, and artifacts
 
 **Major Optimizations:**
-1. **combined_status API** - Single API call returning one status object (not 462 check runs)
+1. **GraphQL for homepage PR list + CI status** - Single GraphQL query returns all PRs with `statusCheckRollup`
+   - 31 REST calls (~6s) → 1 GraphQL call (~300ms), 97% fewer API calls
+2. **combined_status API** - Single API call returning one status object (not 462 check runs)
    - 9s → 0.3s (97% faster)
-2. **Cache individual PRs from background** - Background refresh caches each PR individually for reuse
+3. **ETag caching on check_runs and commit_statuses** - Conditional requests return 304 when data unchanged
+   - Subsequent refreshes: 5-7 API calls → 1 conditional request
+4. **Single fetch for commit statuses** - Fetch once, filter locally instead of 3 separate paginated fetches
+5. **Cache individual PRs from background** - Background refresh caches each PR individually for reuse
    - User PR fetch: 650ms → 47ms (93% faster)
-   - Makes background operations help instead of hurt
-3. **Skip work for passing PRs** - When ci_status is :green, skip check_runs, artifacts, and parsing
+6. **Skip work for passing PRs** - When ci_status is :green, skip check_runs, artifacts, and parsing
    - Saves 14.7s for passing PRs
-4. **Parallel job log downloads** - Download logs concurrently instead of sequentially
+7. **Parallel job log downloads** - Download logs concurrently instead of sequentially
    - 5 jobs: 4s → 0.8s (80% faster)
-5. **Two-phase categorization** - Show initial results before infrastructure detection
+8. **Two-phase categorization** - Show initial results before infrastructure detection
    - User sees categories instantly, infrastructure detection follows
-6. **PR object passed through call stack** - Eliminates 5 redundant API calls per page load
-7. **Check runs fetched once and filtered** - Eliminates duplicate pagination
-8. **Job logs cached to disk** at `.cache/logs/{job_id}.log` - Prevents re-downloading 1-10MB files
-9. **Two-pass JUnit parsing** - Parses failures first, then full results only for failed tests
+9. **PR object passed through call stack** - Eliminates 5 redundant API calls per page load
+10. **Check runs fetched once and filtered** - Eliminates duplicate pagination
+11. **Job logs cached to disk** at `.cache/logs/{job_id}.log` - Prevents re-downloading 1-10MB files
+12. **Two-pass JUnit parsing** - Parses failures first, then full results only for failed tests
 
 **Performance Impact:**
 
