@@ -49,6 +49,7 @@ When the only failing jobs are meta-checks (all-jobs-are-green, dd-gitlab/defaul
   - Background refresher pre-warms full PR analysis for all PRs by that author
   - Makes PR detail pages instant for the author's PRs (artifacts, logs, test details cached)
 - `BELLS_BACKGROUND_REFRESH` - Set to `"false"` to disable all background operations (default: enabled)
+- `BELLS_STREAMING` - Set to `"true"` to enable progressive SSE streaming on PR analysis pages (default: disabled). Can also be enabled per-request with `?stream=true` query parameter.
 
 **Security:**
 - XSS protection via automatic HTML escaping (erubi)
@@ -60,13 +61,14 @@ When the only failing jobs are meta-checks (all-jobs-are-green, dd-gitlab/defaul
 **Usage:**
 ```bash
 # Using bin/bells wrapper (recommended)
-bin/bells                        # Default: background refresh enabled
+bin/bells                        # Default: background refresh enabled, streaming off
 bin/bells -a alice               # Filter by author + pre-warm their PRs
 bin/bells -b                     # Disable background operations
-bin/bells -a alice -b            # Filter by author, no background
+bin/bells -s                     # Enable progressive streaming for PR pages
+bin/bells -a alice -s            # Filter by author, streaming on
 
 # Long options
-bin/bells --author alice --no-background
+bin/bells --author alice --stream --no-background
 
 # Direct puma usage
 bundle exec puma
@@ -77,6 +79,7 @@ bundle exec rerun -- puma
 # Advanced: environment variables
 BELLS_DEFAULT_AUTHOR=alice bundle exec puma
 BELLS_BACKGROUND_REFRESH=false bundle exec puma
+BELLS_STREAMING=true bundle exec puma
 
 # Visit http://localhost:9292
 ```
@@ -85,7 +88,7 @@ BELLS_BACKGROUND_REFRESH=false bundle exec puma
 
 ## Progressive Rendering
 
-PR detail pages use Server-Sent Events (SSE) to progressively update the UI as analysis completes, reducing perceived load time by 95%.
+PR detail pages can optionally use Server-Sent Events (SSE) to progressively update the UI as analysis completes, reducing perceived load time by 95%. Disabled by default; enable with `BELLS_STREAMING=true`, `bin/bells -s`, or `?stream=true` per-request. When disabled, PR analysis renders as a single blocking page load.
 
 **User Experience:**
 - Skeleton renders immediately (~700ms) with PR title, author, CI status, and loading placeholders

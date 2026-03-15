@@ -106,8 +106,9 @@ get "/pr/:number" do
   @pr_author = pr.user.login
   @pr_head_sha = pr.head.sha
 
-  # Use streaming in development/production, not in tests
-  @use_streaming = settings.environment != :test
+  # Streaming off by default, enable with ?stream=true or BELLS_STREAMING=true
+  @use_streaming = params[:stream] == "true" || ENV["BELLS_STREAMING"] == "true"
+  @use_streaming = false if settings.environment == :test
 
   # In test mode or if streaming disabled, run full analysis
   unless @use_streaming

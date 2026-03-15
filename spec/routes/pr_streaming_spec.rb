@@ -94,7 +94,7 @@ RSpec.describe "PR Streaming Routes" do
         pr: mock_pr, ci_status: :green
       })
 
-      get "/pr/123"
+      get "/pr/123?stream=true"
 
       expect(last_response).to be_ok
       expect(last_response.body).to include("PR #123: Test PR")

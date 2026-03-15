@@ -15,6 +15,10 @@ OptionParser.new do |opts|
     options[:no_background] = true
   end
 
+  opts.on("-s", "--stream", "Enable progressive streaming for PR analysis pages") do
+    options[:streaming] = true
+  end
+
   opts.on("-h", "--help", "Prints this help") do
     puts opts
     exit
@@ -26,6 +30,10 @@ ENV['BELLS_DEFAULT_AUTHOR'] = options[:author] if options[:author]
 
 if options[:no_background]
   ENV['BELLS_BACKGROUND_REFRESH'] = 'false'
+end
+
+if options[:streaming]
+  ENV['BELLS_STREAMING'] = 'true'
 end
 
 # Execute puma with any remaining arguments
