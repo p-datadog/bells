@@ -141,7 +141,7 @@ module Bells
       puts "[#{Time.now}]   ✓ Warmed PR ##{pr_number} (%.2fs)" % duration
     rescue => e
       duration = Time.now - start_time
-      warn "[#{Time.now}]   ✗ Failed to warm PR ##{pr_number} (%.2fs): #{e.class}: #{e}" % duration
+      warn "[#{Time.now}]   ✗ Failed to warm PR ##{pr_number} (#{"%.2f" % duration}s): #{e.class}: #{e}"
       warn e.backtrace.first(5).map { |l| "  #{l}" }.join("\n")
       # Don't raise - continue with other PRs
     end
