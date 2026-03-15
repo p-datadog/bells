@@ -8,8 +8,12 @@ require "json"
 require "fileutils"
 
 module Bells
-  # Job name for the meta-check that waits for all other jobs
-  META_CHECK_JOB_NAME = "all-jobs-are-green"
+  # Meta-check jobs that wait for all other jobs to complete
+  META_CHECK_JOB_NAMES = [
+    "all-jobs-are-green",       # GitHub Actions
+    "dd-gitlab/default-pipeline" # GitLab CI
+  ].freeze
+  META_CHECK_JOB_NAME = META_CHECK_JOB_NAMES.first # backwards compat
   CACHE_TTL = 300 # 5 minutes
 
   # Atomic file write helper to prevent corruption from concurrent writes
@@ -76,18 +80,7 @@ module Bells
       # Merge failures from both sources
       categorized = categorizer.group_by_category(job_failures + status_failures)
 
-      # Auto-restart meta-check job if it's the only GitHub Actions failure and no GitLab failures
-      auto_restarted = false
-      if failed_jobs.size == 1 && failed_jobs.first.name == META_CHECK_JOB_NAME && failed_statuses.empty?
-        job_id = failed_jobs.first.id
-        Thread.new do
-          puts "Auto-restarting #{META_CHECK_JOB_NAME} job #{job_id} for PR #{pr_number}"
-          client.restart_job(job_id)
-        rescue => e
-          warn "Failed to restart job #{job_id}: #{e.message}"
-        end
-        auto_restarted = true
-      end
+      auto_restarted = auto_restart_meta_checks(failed_jobs, failed_statuses, client, pr_number)
 
       # Extract meta-check failures to show separately when there are other failures
       meta_failures = nil
@@ -256,18 +249,7 @@ module Bells
       categorized = categorizer.group_by_category(job_failures + status_failures)
       log_timing.call("Final categorization complete (with infrastructure detection)")
 
-      # Auto-restart meta-check job if it's the only GitHub Actions failure and no GitLab failures
-      auto_restarted = false
-      if failed_jobs.size == 1 && failed_jobs.first.name == META_CHECK_JOB_NAME && failed_statuses.empty?
-        job_id = failed_jobs.first.id
-        Thread.new do
-          puts "Auto-restarting #{META_CHECK_JOB_NAME} job #{job_id} for PR #{pr_number}"
-          client.restart_job(job_id)
-        rescue => e
-          warn "Failed to restart job #{job_id}: #{e.message}"
-        end
-        auto_restarted = true
-      end
+      auto_restarted = auto_restart_meta_checks(failed_jobs, failed_statuses, client, pr_number)
 
       # Extract meta-check failures
       meta_failures = nil
@@ -363,6 +345,25 @@ module Bells
     end
 
     private
+
+    def auto_restart_meta_checks(failed_jobs, failed_statuses, client, pr_number)
+      all_meta = failed_jobs.all? { |j| META_CHECK_JOB_NAMES.include?(j.name) } &&
+                 failed_statuses.all? { |s| META_CHECK_JOB_NAMES.include?(s.context) }
+      return false unless all_meta && (failed_jobs.any? || failed_statuses.any?)
+
+      restartable = failed_jobs.select { |j| META_CHECK_JOB_NAMES.include?(j.name) }
+      return false if restartable.empty?
+
+      restartable.each do |job|
+        Thread.new do
+          puts "Auto-restarting meta-check job #{job.name} (#{job.id}) for PR #{pr_number}"
+          client.restart_job(job.id)
+        rescue => e
+          warn "Failed to restart job #{job.id}: #{e.message}"
+        end
+      end
+      true
+    end
 
     def serialize_failures_for_json(failures)
       return nil if failures.nil?

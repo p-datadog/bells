@@ -4,7 +4,7 @@ module Bells
   class FailureCategorizer
     # Order matters - more specific patterns first
     CATEGORIES = [
-      [:meta, /\Aall-jobs-are-green\z/],
+      [:meta, /\Aall-jobs-are-green\z|\Add-gitlab\/default-pipeline\z/],
       [:type_check, /steep|typecheck|type.?check|rbs/i],
       [:lint, %r{lint|rubocop|standard/|actionlint|yaml-lint|semgrep|zizmor}i],
       [:security, /codeql|security|semgrep/i],

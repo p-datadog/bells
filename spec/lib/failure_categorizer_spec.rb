@@ -17,6 +17,12 @@ RSpec.describe Bells::FailureCategorizer do
       expect(result.category).to eq(:meta)
     end
 
+    it "categorizes GitLab default-pipeline as meta check" do
+      job = mock_job("dd-gitlab/default-pipeline")
+      result = categorizer.categorize_job(job)
+      expect(result.category).to eq(:meta)
+    end
+
     it "categorizes type check jobs" do
       type_check_names = [
         "steep/typecheck",
