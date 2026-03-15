@@ -6,6 +6,7 @@ require "faraday/follow_redirects"
 require "zip"
 require "fileutils"
 require "open3"
+require "ostruct"
 require_relative "etag_cache"
 
 module Bells
