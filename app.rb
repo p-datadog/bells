@@ -234,8 +234,14 @@ get "/gitlab/log/:job_id" do
   @job_id = job_id
   @job_name = job_name
   @log_html = Bells::AnsiToHtml.convert(log)
-  @ansi_css = Bells::AnsiToHtml.css
   @gitlab_url = "https://gitlab.ddbuild.io/#{project_path}/builds/#{job_id}"
+  @head_styles = <<~CSS
+    .container { max-width: none; }
+    body { font-size: 14px; }
+    h1 { font-size: 1.3em; }
+    .log-viewer a { color: #6cb6ff; }
+    #{Bells::AnsiToHtml.css}
+  CSS
 
   # Job logs are immutable — cache in browser for 7 days
   cache_control :public, max_age: 604800
