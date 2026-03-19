@@ -235,6 +235,7 @@ get "/gitlab/log/:job_id" do
   @job_name = job_name
   @log_html = Bells::AnsiToHtml.convert(log)
   @gitlab_url = "https://gitlab.ddbuild.io/#{project_path}/builds/#{job_id}"
+  @no_layout_js = true
   @head_styles = <<~CSS
     .container { max-width: none; }
     body { font-size: 14px; }

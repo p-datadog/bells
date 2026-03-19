@@ -49,6 +49,7 @@
   <div class="container">
     <%== yield %>
   </div>
+  <% unless @no_layout_js %>
   <script>
     document.querySelectorAll('.expandable').forEach(row => {
       row.addEventListener('click', () => {
@@ -71,5 +72,6 @@
       });
     }
   </script>
+  <% end %>
 </body>
 </html>
