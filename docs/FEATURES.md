@@ -32,7 +32,7 @@ Both GitHub Actions check runs and GitLab CI commit statuses are tracked. Pendin
 - Security - CodeQL, semgrep
 - Tests - unit tests, integration tests, e2e tests
 - Build - build/compile jobs
-- Uncategorized - anything else
+- Other - anything not matching the above categories
 
 **Components:**
 - `Bells::GitHubClient` - Fetches workflow runs, CI status, failed/passed/pending jobs and statuses, JUnit artifacts, and job logs. Includes restart_job method and GraphQL-based `pull_requests_with_status` for homepage.

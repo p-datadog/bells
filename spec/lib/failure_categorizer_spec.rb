@@ -94,18 +94,19 @@ RSpec.describe Bells::FailureCategorizer do
       end
     end
 
-    it "marks unknown jobs as uncategorized" do
-      uncategorized_names = [
+    it "marks unknown jobs as other" do
+      other_names = [
         "some-random-job",
         "deploy-staging",
         "notify-slack",
-        "generate-docs"
+        "generate-docs",
+        "dd-gitlab/validate_supported_configurations_v2_local_file"
       ]
 
-      uncategorized_names.each do |name|
+      other_names.each do |name|
         job = mock_job(name)
         result = categorizer.categorize_job(job)
-        expect(result.category).to eq(:uncategorized), "Expected #{name} to be :uncategorized"
+        expect(result.category).to eq(:other), "Expected #{name} to be :other"
       end
     end
 
@@ -250,7 +251,7 @@ RSpec.describe Bells::FailureCategorizer do
       it "categorizes by name only" do
         status = mock_status("dd-gitlab/validate_supported_configurations_v2_local_file")
         result = categorizer.categorize_status(status)
-        expect(result.category).to eq(:tests)
+        expect(result.category).to eq(:other)
       end
     end
   end
@@ -302,7 +303,7 @@ RSpec.describe Bells::FailureCategorizer do
       expect(described_class.category_label(:type_check)).to eq("Type Check")
       expect(described_class.category_label(:lint)).to eq("Lint")
       expect(described_class.category_label(:tests)).to eq("Tests")
-      expect(described_class.category_label(:uncategorized)).to eq("Uncategorized")
+      expect(described_class.category_label(:other)).to eq("Other")
       expect(described_class.category_label(:infrastructure)).to eq("Infrastructure")
     end
   end

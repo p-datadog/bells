@@ -8,7 +8,7 @@ module Bells
       [:type_check, /steep|typecheck|type.?check|rbs/i],
       [:lint, %r{lint|rubocop|standard/|actionlint|yaml-lint|semgrep|zizmor}i],
       [:security, /codeql|security|semgrep/i],
-      [:tests, %r{test|spec|build & test|parametric|end-to-end|junit|batch|validate[\w_]*config}i],
+      [:tests, %r{test|spec|build & test|parametric|end-to-end|junit|batch}i],
       [:build, /\bbuild\b|compile|bundle/i]
     ].freeze
 
@@ -64,7 +64,7 @@ module Bells
       security: "Security",
       tests: "Tests",
       build: "Build",
-      uncategorized: "Uncategorized"
+      other: "Other"
     }.freeze
 
     JobFailure = Struct.new(
@@ -147,9 +147,9 @@ module Bells
     def group_by_category(job_failures)
       grouped = job_failures.group_by(&:category)
 
-      # Order: tests first (most important), then type/lint, uncategorized, infrastructure, meta last
+      # Order: tests first (most important), then type/lint, other, infrastructure, meta last
       result = {}
-      [:tests, :type_check, :lint, :security, :build, :uncategorized, :infrastructure, :meta].each do |cat|
+      [:tests, :type_check, :lint, :security, :build, :other, :infrastructure, :meta].each do |cat|
         result[cat] = grouped[cat] if grouped[cat]&.any?
       end
       result
@@ -165,7 +165,7 @@ module Bells
       CATEGORIES.each do |category, pattern|
         return category if name.match?(pattern)
       end
-      :uncategorized
+      :other
     end
 
     def check_for_gitlab_infrastructure_failure(project_path, job_id, gitlab_client)
