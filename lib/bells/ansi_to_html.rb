@@ -13,7 +13,9 @@ module Bells
     }.freeze
 
     # GitLab CI log prefix: timestamp + stream id (e.g. "2026-03-18T21:10:26.489682Z 00O ")
-    GITLAB_PREFIX = /\A\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d+Z \d{2}[OE]\+? ?/
+    # No \A anchor: prefixes appear at start of every line, and multiple can appear
+    # on the same display line when section markers consume their trailing newline.
+    GITLAB_PREFIX = /\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d+Z \d{2}[OE]\+? ?/
 
     # GitLab CI section markers
     SECTION_MARKER = /section_(?:start|end):\d+:\w+(?:\[.*?\])?\r?\n?/
@@ -31,11 +33,16 @@ module Bells
     def self.convert(text)
       return "" if text.nil? || text.empty?
 
+      # Simulate terminal carriage-return overwrite: for each line, keep only the
+      # last non-empty segment after all CR overwrites (e.g. curl progress bars).
+      text = text.split("\n", -1).map { |line|
+        line.split("\r", -1).reject(&:empty?).last || ""
+      }.join("\n")
+
       # Strip GitLab-specific noise
       text = text.gsub(GITLAB_PREFIX, "")
       text = text.gsub(SECTION_MARKER, "")
       text = text.gsub(CLEAR_SEQUENCE, "")
-      text = text.gsub("\r", "")
 
       result = +""
       open_spans = 0

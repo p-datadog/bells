@@ -95,6 +95,72 @@ RSpec.describe Bells::AnsiToHtml do
       expect(result).not_to include("00O+")
       expect(result).to include("Content")
     end
+
+    it "strips prefixes from all lines, not just the first" do
+      input = "2026-03-18T21:10:26.489682Z 00O First line\n" \
+              "2026-03-18T21:10:26.489687Z 00O Second line\n" \
+              "2026-03-18T21:10:26.489692Z 00O Third line\n"
+      result = described_class.convert(input)
+      expect(result).not_to include("2026-03-18")
+      expect(result).not_to include("00O")
+      expect(result).to include("First line")
+      expect(result).to include("Second line")
+      expect(result).to include("Third line")
+    end
+
+    it "strips stream 01 (script output) prefixes" do
+      input = "2026-03-18T21:11:10.633033Z 01O $ git fetch\n" \
+              "2026-03-18T21:11:10.633041Z 01O Fetching changes...\n"
+      result = described_class.convert(input)
+      expect(result).not_to include("01O")
+      expect(result).not_to include("2026-03-18")
+      expect(result).to include("$ git fetch")
+      expect(result).to include("Fetching changes...")
+    end
+
+    it "strips stderr (00E) prefixes" do
+      input = "2026-03-18T21:10:26.833750Z 00E Waiting for pod to be running\n"
+      result = described_class.convert(input)
+      expect(result).not_to include("00E")
+      expect(result).to include("Waiting for pod to be running")
+    end
+
+    it "strips multiple embedded prefixes on the same display line" do
+      # Happens when a section marker consumes the newline: the next prefix
+      # appears immediately after the previous line's content with no separator.
+      input = "2026-03-18T21:10:26.489709Z 00O 2026-03-18T21:10:26.489711Z 00O+Content here"
+      result = described_class.convert(input)
+      expect(result).not_to include("2026-03-18")
+      expect(result).not_to include("00O")
+      expect(result).to include("Content here")
+    end
+
+    it "simulates carriage-return overwrite for progress bar lines" do
+      # curl and other tools use \r to overwrite progress on the same line.
+      # We should keep only the final visible state.
+      input = "2026-03-18T21:11:13.000000Z 01O   0     0    0     0\r100  1368  100  1368\r\n"
+      result = described_class.convert(input)
+      expect(result).not_to include("  0     0")
+      expect(result).to include("100  1368")
+    end
+
+    it "autolinks http URLs" do
+      input = "See https://example.com/path for details"
+      result = described_class.convert(input)
+      expect(result).to include('<a href="https://example.com/path">https://example.com/path</a>')
+    end
+
+    it "autolinks URLs with query strings" do
+      input = "https://feature-parity.us1.prod.dog/#/configurations?viewType=configurations"
+      result = described_class.convert(input)
+      expect(result).to include('<a href="https://feature-parity.us1.prod.dog/#/configurations?viewType=configurations">')
+    end
+
+    it "does not autolink non-URL text that starts with http" do
+      input = "status: ok"
+      result = described_class.convert(input)
+      expect(result).not_to include("<a href")
+    end
   end
 
   describe ".css" do
