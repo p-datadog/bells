@@ -158,6 +158,49 @@ RSpec.describe Bells::AnsiToHtml do
       result = described_class.convert(input)
       expect(result).not_to include("<a href")
     end
+
+    it "inserts error anchor at first 'Error: ' line" do
+      input = "Setting up...\nRunning checks\nError: There are validation errors:\nDetails here"
+      result = described_class.convert(input)
+      expect(result).to include('<a id="first-error"></a>Error: There are validation errors:')
+    end
+
+    it "inserts error anchor at first RSpec 'Failure/Error:' line" do
+      input = "...\n  Failure/Error: subject.call\n\n    expected: true"
+      result = described_class.convert(input)
+      expect(result).to include('<a id="first-error"></a>  Failure/Error: subject.call')
+    end
+
+    it "inserts anchor only at the first error, not subsequent ones" do
+      input = "Error: first problem\nError: second problem"
+      result = described_class.convert(input)
+      expect(result.scan('id="first-error"').length).to eq(1)
+      expect(result).to include('<a id="first-error"></a>Error: first problem')
+    end
+
+    it "does not insert anchor when there are no errors" do
+      input = "All checks passed\nDone"
+      result = described_class.convert(input)
+      expect(result).not_to include("first-error")
+    end
+
+    it "does not anchor on JSON '_error' keys" do
+      input = '  "_error": {'
+      result = described_class.convert(input)
+      expect(result).not_to include("first-error")
+    end
+
+    it "does not anchor on 'ERROR: Job failed:' (runner exit message)" do
+      input = "ERROR: Job failed: command terminated with exit code 1"
+      result = described_class.convert(input)
+      expect(result).not_to include("first-error")
+    end
+
+    it "detects errors through ANSI color codes" do
+      input = "Setup done\n\e[31mError: Something broke\e[0m"
+      result = described_class.convert(input)
+      expect(result).to include('id="first-error"')
+    end
   end
 
   describe ".css" do

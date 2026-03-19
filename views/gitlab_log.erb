@@ -2,6 +2,7 @@
 <p>
   Job ID: <%= @job_id %> |
   <a href="<%= @gitlab_url %>">View @ GitLab</a> |
+  <% if @has_error_anchor %><a href="#first-error">Jump to error</a> |<% end %>
   <a href="javascript:history.back()">Back</a>
 </p>
 <div class="log-viewer"><%== @log_html %></div>

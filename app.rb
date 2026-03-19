@@ -234,6 +234,7 @@ get "/gitlab/log/:job_id" do
   @job_id = job_id
   @job_name = job_name
   @log_html = Bells::AnsiToHtml.convert(log)
+  @has_error_anchor = @log_html.include?('id="first-error"')
   @gitlab_url = "https://gitlab.ddbuild.io/#{project_path}/builds/#{job_id}"
   @no_layout_js = true
   @head_styles = <<~CSS

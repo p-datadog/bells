@@ -39,6 +39,14 @@ module Bells
     # URLs to autolink
     URL_PATTERN = /https?:\/\/[^\s<>"]+/
 
+    # Patterns for detecting the first error line in log output.
+    # Matched against cleaned plain text (ANSI codes stripped), one line at a time.
+    # See docs/log-viewer-error-anchoring.md for details on adding patterns.
+    ERROR_PATTERNS = [
+      /\AError: /,         # Line starts with "Error: " (config validation scripts)
+      /Failure\/Error:/,   # RSpec failure marker
+    ].freeze
+
     def self.convert(text)
       return "" if text.nil? || text.empty?
 
@@ -52,6 +60,10 @@ module Bells
       text = text.gsub(GITLAB_STREAM_ID, " ")
       text = text.gsub(SECTION_MARKER, "")
       text = text.gsub(CLEAR_SEQUENCE, "")
+
+      # Detect first error line for anchor insertion (match against plain text)
+      plain_lines = text.gsub(ANSI_ESCAPE, "").split("\n")
+      first_error_line = plain_lines.index { |l| ERROR_PATTERNS.any? { |p| l.match?(p) } }
 
       result = +""
       open_spans = 0
@@ -96,6 +108,16 @@ module Bells
       end
 
       open_spans.times { result << "</span>" }
+
+      # Insert anchor at first error line
+      if first_error_line
+        html_lines = result.split("\n", -1)
+        if first_error_line < html_lines.length
+          html_lines[first_error_line] = '<a id="first-error"></a>' + html_lines[first_error_line]
+        end
+        result = html_lines.join("\n")
+      end
+
       result
     end
 
