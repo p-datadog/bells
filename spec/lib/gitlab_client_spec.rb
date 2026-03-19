@@ -118,19 +118,30 @@ RSpec.describe Bells::GitLabClient do
     let(:project_path) { "datadog/apm-reliability/dd-trace-rb" }
     let(:encoded_project) { "datadog%2Fapm-reliability%2Fdd-trace-rb" }
 
-    it "paginates through all jobs" do
+    it "paginates through all jobs using x-next-page header" do
       page1 = Array.new(100) { |i| { id: i, name: "job-#{i}" } }
       page2 = [{ id: 100, name: "job-100" }, { id: 101, name: "job-101" }]
 
       stub_request(:get, "https://gitlab.ddbuild.io/api/v4/projects/#{encoded_project}/pipelines/999/jobs")
         .with(query: { "per_page" => "100", "page" => "1" })
-        .to_return(status: 200, body: page1.to_json)
+        .to_return(status: 200, body: page1.to_json, headers: { "x-next-page" => "2" })
       stub_request(:get, "https://gitlab.ddbuild.io/api/v4/projects/#{encoded_project}/pipelines/999/jobs")
         .with(query: { "per_page" => "100", "page" => "2" })
-        .to_return(status: 200, body: page2.to_json)
+        .to_return(status: 200, body: page2.to_json, headers: { "x-next-page" => "" })
 
       jobs = client.pipeline_jobs(project_path, 999)
       expect(jobs.size).to eq(102)
+    end
+
+    it "stops when x-next-page header is missing" do
+      page1 = [{ id: 1, name: "job-1" }]
+
+      stub_request(:get, "https://gitlab.ddbuild.io/api/v4/projects/#{encoded_project}/pipelines/999/jobs")
+        .with(query: { "per_page" => "100", "page" => "1" })
+        .to_return(status: 200, body: page1.to_json)
+
+      jobs = client.pipeline_jobs(project_path, 999)
+      expect(jobs.size).to eq(1)
     end
 
     it "handles empty pipeline" do

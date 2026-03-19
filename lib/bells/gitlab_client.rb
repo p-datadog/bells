@@ -54,7 +54,7 @@ module Bells
       nil
     end
 
-    # Fetch all jobs for a pipeline, with pagination
+    # Fetch all jobs for a pipeline, with pagination via x-next-page header
     def pipeline_jobs(project_path, pipeline_id)
       encoded_project = URI.encode_www_form_component(project_path)
       all_jobs = []
@@ -66,12 +66,12 @@ module Bells
         break unless response.success?
 
         jobs = JSON.parse(response.body, symbolize_names: true)
-        break if jobs.empty?
-
         all_jobs.concat(jobs)
-        break if jobs.size < 100
 
-        page += 1
+        next_page = response.headers["x-next-page"]
+        break if next_page.nil? || next_page.empty?
+
+        page = next_page.to_i
       end
 
       all_jobs

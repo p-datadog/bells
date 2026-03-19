@@ -36,7 +36,8 @@ Both GitHub Actions check runs and GitLab CI commit statuses are tracked. Pendin
 
 **Components:**
 - `Bells::GitHubClient` - Fetches workflow runs, CI status, failed/passed/pending jobs and statuses, JUnit artifacts, and job logs. Includes restart_job method and GraphQL-based `pull_requests_with_status` for homepage.
-- `Bells::FailureCategorizer` - Categorizes failed jobs by type. Analyzes job logs to detect infrastructure failures (GitHub API errors, runner issues, network problems) that take precedence over name-based categorization.
+- `Bells::GitLabClient` - Fetches job logs, job details, and pipeline jobs from gitlab.ddbuild.io. Auth via `GITLAB_TOKEN` env var or `glab` CLI. Parses build/pipeline URLs from GitHub commit status `target_url` fields. Logs cached to `.cache/gitlab_logs/`.
+- `Bells::FailureCategorizer` - Categorizes failed jobs by type. Analyzes job logs from both GitHub Actions and GitLab CI to detect infrastructure failures (API errors, runner issues, network problems) that take precedence over name-based categorization.
 - `Bells::JunitParser` - Parses JUnit XML files to extract all test results (passes and failures)
 - `Bells::FailureAggregator` - Groups test results and detects true flaky tests (tests that both pass and fail in the same PR)
 
@@ -127,7 +128,9 @@ PR detail pages can optionally use Server-Sent Events (SSE) to progressively upd
 - Server errors sent as SSE error events
 - Graceful degradation to non-streaming mode in test environment
 
-## GitHub API Integration
+## API Integration
+
+### GitHub
 
 Two API strategies: GraphQL for PR + CI status fetching, REST for granular CI operations.
 
@@ -168,6 +171,21 @@ Use REST when:
 - **The endpoint has no GraphQL equivalent** — Job logs (`actions/jobs/{id}/logs`) and artifact downloads are REST-only.
 - **Write operations** — Job restarts (`actions/jobs/{id}/rerun`) are REST-only.
 
+### GitLab (gitlab.ddbuild.io)
+
+GitLab CI posts commit statuses to GitHub with `dd-gitlab/` prefix and `target_url` pointing to `gitlab.ddbuild.io`. The `GitLabClient` fetches job logs from the GitLab API to enable infrastructure failure detection (same patterns used for GitHub Actions).
+
+**Auth:** `GITLAB_TOKEN` env var → `glab auth token --hostname gitlab.ddbuild.io` CLI fallback.
+
+**Endpoints used:**
+- `GET /projects/:id/jobs/:job_id/trace` — job log (for infrastructure detection), cached to `.cache/gitlab_logs/`
+- `GET /projects/:id/jobs/:job_id` — job details (name, stage, failure_reason)
+- `GET /projects/:id/pipelines/:pipeline_id/jobs` — all jobs in a pipeline, paginated via `x-next-page` response header
+
+**Pagination:** GitLab returns `x-next-page` response header (empty string when no more pages). All paginated endpoints loop until `x-next-page` is nil or empty.
+
+**URL parsing:** `GitLabClient.parse_target_url` extracts hostname, project path, and build/pipeline ID from commit status `target_url` fields. Only build URLs (not pipeline URLs) trigger log downloads, since pipeline URLs don't correspond to a single job.
+
 ## Performance Optimizations
 
 Comprehensive caching and optimization reducing PR detail page load time by 98% (31s → 0.7s).
@@ -189,13 +207,13 @@ Comprehensive caching and optimization reducing PR detail page load time by 98% 
    - User PR fetch: 650ms → 47ms (93% faster)
 6. **Skip work for passing PRs** - When ci_status is :green, skip check_runs, artifacts, and parsing
    - Saves 14.7s for passing PRs
-7. **Parallel job log downloads** - Download logs concurrently instead of sequentially
+7. **Parallel job log downloads** - Download GitHub and GitLab logs concurrently in separate thread pools
    - 5 jobs: 4s → 0.8s (80% faster)
 8. **Two-phase categorization** - Show initial results before infrastructure detection
    - User sees categories instantly, infrastructure detection follows
 9. **PR object passed through call stack** - Eliminates 5 redundant API calls per page load
 10. **Check runs fetched once and filtered** - Eliminates duplicate pagination
-11. **Job logs cached to disk** at `.cache/logs/{job_id}.log` - Prevents re-downloading 1-10MB files
+11. **Job logs cached to disk** - GitHub at `.cache/logs/{job_id}.log`, GitLab at `.cache/gitlab_logs/{job_id}.log`
 12. **Two-pass JUnit parsing** - Parses failures first, then full results only for failed tests
 
 **Performance Impact:**
@@ -235,7 +253,8 @@ Total: 57ms server + ~650ms network/browser = ~700ms perceived
 
 **Cache Invalidation:**
 - Analysis cache: 5-minute TTL, invalidated on HEAD SHA change
-- Job logs: Permanent (immutable)
+- GitHub job logs: Permanent at `.cache/logs/{job_id}.log` (immutable)
+- GitLab job logs: Permanent at `.cache/gitlab_logs/{job_id}.log` (immutable)
 - Artifacts: Permanent (immutable, keyed by run_id)
 - PR list: 2-minute TTL (background refresh)
 - Individual PRs: 2-minute TTL (background refresh)
