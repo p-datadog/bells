@@ -203,6 +203,117 @@ RSpec.describe "PR Analysis Routes" do
     end
   end
 
+  describe "GET /pr/:number with GitLab failures" do
+    let(:mock_client) { instance_double(Bells::GitHubClient) }
+    let(:mock_pr) { OpenStruct.new(
+      title: "Test PR",
+      user: OpenStruct.new(login: "testuser"),
+      head: OpenStruct.new(sha: "abc123")
+    ) }
+    let(:gitlab_failure) do
+      Bells::FailureCategorizer::JobFailure.new(
+        job_name: "dd-gitlab/validate_supported_configurations_v2_local_file",
+        job_id: nil,
+        category: :other,
+        url: "https://gitlab.ddbuild.io/datadog/apm-reliability/dd-trace-rb/builds/1519662090",
+        details: nil
+      )
+    end
+    let(:github_failure) do
+      Bells::FailureCategorizer::JobFailure.new(
+        job_name: "Ruby 3.3 / build & test (standard) [0]",
+        job_id: 456,
+        category: :tests,
+        url: "https://github.com/DataDog/dd-trace-rb/actions/runs/123/job/456",
+        details: nil
+      )
+    end
+
+    before do
+      allow(Bells::GitHubClient).to receive(:new).and_return(mock_client)
+      allow(mock_client).to receive(:pull_request_with_status).and_return({
+        pr: mock_pr, ci_status: :failed
+      })
+      allow(Bells).to receive(:analyze_pr).and_return(
+        categorized_failures: { other: [gitlab_failure], tests: [github_failure] },
+        meta_failures: nil,
+        test_details: { total_failures: 0, unique_tests: 0, flaky_tests: 0, aggregated: [] },
+        total_failed_jobs: 2,
+        in_progress_jobs: 0,
+        passed_jobs: 5,
+        auto_restarted: false,
+        download_errors: []
+      )
+    end
+
+    it "renders bells log viewer link for GitLab failures" do
+      get "/pr/123"
+
+      expect(last_response).to be_ok
+      expect(last_response.body).to include("/gitlab/log/1519662090")
+      expect(last_response.body).to include("View @ GitLab")
+    end
+
+    it "renders direct link for GitHub failures" do
+      get "/pr/123"
+
+      expect(last_response).to be_ok
+      # GitHub failure should have View Logs pointing to GitHub, no "View @ GitLab"
+      expect(last_response.body).to include("actions/runs/123/job/456")
+    end
+  end
+
+  describe "GET /gitlab/log/:job_id" do
+    let(:mock_gitlab_client) { instance_double(Bells::GitLabClient, available?: true) }
+
+    before do
+      allow(Bells::GitLabClient).to receive(:new).and_return(mock_gitlab_client)
+    end
+
+    it "renders formatted log" do
+      allow(mock_gitlab_client).to receive(:job_log)
+        .with("datadog/apm-reliability/dd-trace-rb", 12345)
+        .and_return("\e[32;1mGreen bold text\e[0m\nPlain line")
+
+      get "/gitlab/log/12345?project=datadog%2Fapm-reliability%2Fdd-trace-rb"
+
+      expect(last_response).to be_ok
+      expect(last_response.body).to include("log-viewer")
+      expect(last_response.body).to include("fg-green")
+      expect(last_response.body).to include("Plain line")
+      expect(last_response.body).to include("View @ GitLab")
+    end
+
+    it "sets cache headers for immutable logs" do
+      allow(mock_gitlab_client).to receive(:job_log)
+        .with("datadog/apm-reliability/dd-trace-rb", 12345)
+        .and_return("log content")
+
+      get "/gitlab/log/12345?project=datadog%2Fapm-reliability%2Fdd-trace-rb"
+
+      expect(last_response).to be_ok
+      expect(last_response.headers["Cache-Control"]).to include("max-age=604800")
+    end
+
+    it "returns 404 when log not found" do
+      allow(mock_gitlab_client).to receive(:job_log)
+        .with("datadog/apm-reliability/dd-trace-rb", 99999)
+        .and_return(nil)
+
+      get "/gitlab/log/99999?project=datadog%2Fapm-reliability%2Fdd-trace-rb"
+
+      expect(last_response.status).to eq(404)
+    end
+
+    it "returns 503 when gitlab token not configured" do
+      allow(mock_gitlab_client).to receive(:available?).and_return(false)
+
+      get "/gitlab/log/12345?project=datadog%2Fapm-reliability%2Fdd-trace-rb"
+
+      expect(last_response.status).to eq(503)
+    end
+  end
+
   describe "GET /api/pr/:number" do
     let(:mock_job_failure) do
       Bells::FailureCategorizer::JobFailure.new(
