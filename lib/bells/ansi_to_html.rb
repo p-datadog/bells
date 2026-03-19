@@ -12,21 +12,12 @@ module Bells
       94 => "bright-blue", 95 => "bright-magenta", 96 => "bright-cyan", 97 => "bright-white"
     }.freeze
 
-    # GitLab Runner log line header (FF_TIMESTAMPS feature flag, Runner 17.0+).
-    # Format: "<RFC3339 timestamp> <stream_number><stream_type><line_type>"
-    #   - stream_number: 2 hex chars identifying the stream (00 = runner control, 01 = job script)
-    #   - stream_type:   O (stdout) or E (stderr)
-    #   - line_type:     + if continuation of previous line, absent otherwise
-    # Example: "2026-03-18T21:10:26.489682Z 00O " or "2026-03-18T21:10:26.489711Z 01E+"
-    # We strip only the stream header, preserving the timestamp for readability.
-    # Ref: https://gitlab.com/gitlab-org/gitlab/-/merge_requests/153516
-    # Ref: https://gitlab.com/gitlab-org/gitlab-runner/-/issues/36888
-    # Ref: https://docs.gitlab.com/ci/jobs/job_logs/#job-log-timestamps
+    # GitLab Runner stream header — stripped to preserve only the timestamp.
+    # See docs/gitlab-log-format.md for full format spec and references.
     GITLAB_STREAM_ID = / \d{2}[OE]\+? ?/
 
-    # GitLab CI collapsible section markers in job logs.
-    # Format: "section_start:<unix_timestamp>:<name>[options]" / "section_end:..."
-    # Ref: https://docs.gitlab.com/ci/jobs/job_logs/#expand-and-collapse-job-log-sections
+    # GitLab CI collapsible section markers.
+    # See docs/gitlab-log-format.md for format spec.
     SECTION_MARKER = /section_(?:start|end):\d+:\w+(?:\[.*?\])?\r?\n?/
 
     # ANSI escape sequence — with or without ESC byte
