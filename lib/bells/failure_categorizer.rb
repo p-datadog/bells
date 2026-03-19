@@ -109,21 +109,39 @@ module Bells
     end
 
     # Categorize commit statuses (GitLab CI)
-    def categorize_status(status)
+    # When gitlab_client is provided, fetches job logs for infrastructure detection
+    def categorize_status(status, gitlab_client: nil)
       name = status.context
-      category = detect_category(name)
+      details = nil
+
+      category = if gitlab_client&.available?
+        parsed = GitLabClient.parse_target_url(status.target_url)
+        if parsed && parsed[:type] == :build
+          infra_check = check_for_gitlab_infrastructure_failure(parsed[:project_path], parsed[:id], gitlab_client)
+          if infra_check[:is_infrastructure]
+            details = infra_check[:details]
+            :infrastructure
+          else
+            detect_category(name)
+          end
+        else
+          detect_category(name)
+        end
+      else
+        detect_category(name)
+      end
 
       JobFailure.new(
         job_name: name,
-        job_id: nil, # Statuses don't have job IDs
+        job_id: nil,
         category: category,
         url: status.target_url,
-        details: status.description
+        details: details || status.description
       )
     end
 
-    def categorize_statuses(statuses)
-      statuses.map { |status| categorize_status(status) }
+    def categorize_statuses(statuses, gitlab_client: nil)
+      statuses.map { |status| categorize_status(status, gitlab_client: gitlab_client) }
     end
 
     def group_by_category(job_failures)
@@ -150,25 +168,34 @@ module Bells
       :uncategorized
     end
 
+    def check_for_gitlab_infrastructure_failure(project_path, job_id, gitlab_client)
+      logs = gitlab_client.job_log(project_path, job_id)
+      return { is_infrastructure: false } unless logs
+
+      check_logs_for_infrastructure_failure(logs)
+    rescue => e
+      warn "Failed to check GitLab infrastructure failure for job #{job_id}: #{e.class}: #{e}"
+      { is_infrastructure: false }
+    end
+
     def check_for_infrastructure_failure(job_id, github_client)
       logs = github_client.job_logs(job_id)
       return { is_infrastructure: false } unless logs
 
-      # Check for infrastructure failure patterns
+      check_logs_for_infrastructure_failure(logs)
+    rescue => e
+      warn "Failed to check infrastructure failure for job #{job_id}: #{e.class}: #{e}"
+      { is_infrastructure: false }
+    end
+
+    def check_logs_for_infrastructure_failure(logs)
       INFRASTRUCTURE_PATTERNS.each do |pattern|
-        if match = logs.match(pattern)
-          # Extract a snippet of context around the match
+        if (match = logs.match(pattern))
           snippet = extract_error_snippet(logs, match)
-          return {
-            is_infrastructure: true,
-            details: snippet
-          }
+          return { is_infrastructure: true, details: snippet }
         end
       end
 
-      { is_infrastructure: false }
-    rescue => e
-      warn "Failed to check infrastructure failure for job #{job_id}: #{e.class}: #{e}"
       { is_infrastructure: false }
     end
 

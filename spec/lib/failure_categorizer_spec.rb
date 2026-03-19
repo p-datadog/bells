@@ -176,8 +176,8 @@ RSpec.describe Bells::FailureCategorizer do
   end
 
   describe "#categorize_status" do
-    def mock_status(context)
-      OpenStruct.new(context: context, target_url: "https://gitlab.example.com", description: "failed", state: "failure")
+    def mock_status(context, target_url: "https://gitlab.example.com/group/project/builds/999", description: "failed")
+      OpenStruct.new(context: context, target_url: target_url, description: description, state: "failure")
     end
 
     it "categorizes dd-gitlab/default-pipeline as meta check" do
@@ -190,6 +190,68 @@ RSpec.describe Bells::FailureCategorizer do
       status = mock_status("dd-gitlab/compute_pipeline")
       result = categorizer.categorize_status(status)
       expect(result.category).not_to eq(:meta)
+    end
+
+    context "with gitlab_client for infrastructure detection" do
+      let(:gitlab_client) { instance_double(Bells::GitLabClient, available?: true) }
+
+      it "detects infrastructure failure from GitLab job logs" do
+        status = mock_status(
+          "dd-gitlab/validate_supported_configurations_v2_local_file",
+          target_url: "https://gitlab.ddbuild.io/datadog/apm-reliability/dd-trace-rb/builds/1519662090"
+        )
+
+        allow(gitlab_client).to receive(:job_log)
+          .with("datadog/apm-reliability/dd-trace-rb", 1519662090)
+          .and_return("Error: No space left on device\nBuild failed")
+
+        result = categorizer.categorize_status(status, gitlab_client: gitlab_client)
+        expect(result.category).to eq(:infrastructure)
+        expect(result.details).to include("No space left on device")
+      end
+
+      it "falls back to name-based categorization when logs have no infra patterns" do
+        status = mock_status(
+          "dd-gitlab/some-test-job",
+          target_url: "https://gitlab.ddbuild.io/datadog/apm-reliability/dd-trace-rb/builds/123"
+        )
+
+        allow(gitlab_client).to receive(:job_log)
+          .with("datadog/apm-reliability/dd-trace-rb", 123)
+          .and_return("RSpec failures:\n1 example, 1 failure")
+
+        result = categorizer.categorize_status(status, gitlab_client: gitlab_client)
+        expect(result.category).to eq(:tests)
+      end
+
+      it "skips log download for pipeline URLs (not build URLs)" do
+        status = mock_status(
+          "dd-gitlab/default-pipeline",
+          target_url: "https://gitlab.ddbuild.io/datadog/apm-reliability/dd-trace-rb/-/pipelines/103388579"
+        )
+
+        # Should not call job_log for pipeline URLs
+        expect(gitlab_client).not_to receive(:job_log)
+
+        result = categorizer.categorize_status(status, gitlab_client: gitlab_client)
+        expect(result.category).to eq(:meta)
+      end
+
+      it "falls back to name-based categorization when gitlab_client is unavailable" do
+        unavailable_client = instance_double(Bells::GitLabClient, available?: false)
+        status = mock_status("dd-gitlab/some-test-job")
+
+        result = categorizer.categorize_status(status, gitlab_client: unavailable_client)
+        expect(result.category).to eq(:tests)
+      end
+    end
+
+    context "without gitlab_client" do
+      it "categorizes by name only" do
+        status = mock_status("dd-gitlab/validate_supported_configurations_v2_local_file")
+        result = categorizer.categorize_status(status)
+        expect(result.category).to eq(:tests)
+      end
     end
   end
 

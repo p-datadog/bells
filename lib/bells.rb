@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require_relative "bells/github_client"
+require_relative "bells/gitlab_client"
 require_relative "bells/junit_parser"
 require_relative "bells/failure_aggregator"
 require_relative "bells/failure_categorizer"
@@ -75,8 +76,9 @@ module Bells
       pending_statuses = all_statuses.select { |s| s.state == "pending" }
 
       # Categorize both check runs and commit statuses
+      gitlab_client = GitLabClient.new
       job_failures = categorizer.categorize_jobs(failed_jobs, github_client: client)
-      status_failures = categorizer.categorize_statuses(failed_statuses)
+      status_failures = categorizer.categorize_statuses(failed_statuses, gitlab_client: gitlab_client)
 
       # Merge failures from both sources
       categorized = categorizer.group_by_category(job_failures + status_failures)
@@ -226,6 +228,7 @@ module Bells
 
       # Phase 1: Send initial categorization WITHOUT infrastructure detection
       # This is fast (name-based only, no log downloads)
+      gitlab_client = GitLabClient.new
       initial_job_failures = categorizer.categorize_jobs(failed_jobs, github_client: nil)
       initial_status_failures = categorizer.categorize_statuses(failed_statuses)
       initial_categorized = categorizer.group_by_category(initial_job_failures + initial_status_failures)
@@ -239,16 +242,17 @@ module Bells
       log_timing.call("EVENT 2: categorized_failures_initial sent")
 
       # Phase 2: Download logs in parallel and send updated categorization
-      # Parallelize the log downloads for infrastructure detection
-      log_timing.call("Starting parallel log downloads for #{failed_jobs.size} jobs...")
-      threads = failed_jobs.map do |job|
+      # Parallelize the log downloads for infrastructure detection (GitHub + GitLab)
+      log_timing.call("Starting parallel log downloads for #{failed_jobs.size} GitHub jobs + #{failed_statuses.size} GitLab statuses...")
+      gh_threads = failed_jobs.map do |job|
         Thread.new { categorizer.categorize_job(job, github_client: client) }
       end
-      job_failures = threads.map(&:value)
+      gl_threads = failed_statuses.map do |status|
+        Thread.new { categorizer.categorize_status(status, gitlab_client: gitlab_client) }
+      end
+      job_failures = gh_threads.map(&:value)
+      status_failures = gl_threads.map(&:value)
       log_timing.call("Parallel log downloads complete")
-
-      # Combine check run failures and status failures
-      status_failures = categorizer.categorize_statuses(failed_statuses)
       categorized = categorizer.group_by_category(job_failures + status_failures)
       log_timing.call("Final categorization complete (with infrastructure detection)")
 

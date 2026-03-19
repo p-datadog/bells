@@ -21,6 +21,14 @@ VCR.configure do |config|
   rescue Errno::ENOENT
     nil
   end
+  config.filter_sensitive_data("<GITLAB_TOKEN>") { ENV["GITLAB_TOKEN"] }
+  config.filter_sensitive_data("<GITLAB_TOKEN>") do
+    require "open3"
+    stdout, status = Open3.capture2("glab", "auth", "token", "--hostname", "gitlab.ddbuild.io", err: File::NULL)
+    status.success? ? stdout.strip : nil
+  rescue Errno::ENOENT
+    nil
+  end
   config.configure_rspec_metadata!
   config.allow_http_connections_when_no_cassette = false
 end
