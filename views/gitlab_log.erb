@@ -1,4 +1,9 @@
-<style>.container { max-width: none; }</style>
+<style>
+  .container { max-width: none; }
+  body { font-size: 14px; }
+  h1 { font-size: 1.3em; }
+  .log-viewer a { color: #6cb6ff; }
+</style>
 <h1>GitLab Job Log<% if @job_name %> - <%= @job_name %><% end %></h1>
 <p>
   Job ID: <%= @job_id %> |

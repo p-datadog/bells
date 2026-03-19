@@ -25,6 +25,9 @@ module Bells
     # GitLab uses [0K for line clearing (with optional ESC prefix)
     CLEAR_SEQUENCE = /(?:\e)?\[0K/
 
+    # URLs to autolink
+    URL_PATTERN = /https?:\/\/[^\s<>"]+/
+
     def self.convert(text)
       return "" if text.nil? || text.empty?
 
@@ -66,6 +69,9 @@ module Bells
               open_spans += 1
             end
           end
+        elsif (url = scanner.scan(URL_PATTERN))
+          escaped = escape_html(url)
+          result << "<a href=\"#{escaped}\">#{escaped}</a>"
         else
           # Consume one character of plain text
           char = scanner.getch
@@ -79,7 +85,7 @@ module Bells
 
     def self.css
       <<~CSS
-        .log-viewer { background: #1e1e1e; color: #d4d4d4; padding: 16px; border-radius: 8px; overflow-x: auto; font-family: 'SF Mono', 'Menlo', 'Monaco', 'Courier New', monospace; font-size: 13px; line-height: 1.5; white-space: pre-wrap; word-wrap: break-word; }
+        .log-viewer { background: #1e1e1e; color: #d4d4d4; padding: 16px; border-radius: 8px; overflow-x: auto; font-family: 'SF Mono', 'Menlo', 'Monaco', 'Courier New', monospace; font-size: 12px; line-height: 1.5; white-space: pre-wrap; word-wrap: break-word; }
         .log-viewer .bold { font-weight: bold; }
         .log-viewer .dim { opacity: 0.6; }
         .log-viewer .italic { font-style: italic; }
