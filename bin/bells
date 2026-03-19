@@ -36,5 +36,5 @@ if options[:streaming]
   ENV['BELLS_STREAMING'] = 'true'
 end
 
-# Execute puma with any remaining arguments
-exec('bundle', 'exec', 'puma', *ARGV)
+# Execute puma, wrapped in rerun for auto-reload during development
+exec('bundle', 'exec', 'rerun', '--no-notify', '--', 'puma', *ARGV)
