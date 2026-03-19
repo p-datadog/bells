@@ -12,10 +12,9 @@ module Bells
       94 => "bright-blue", 95 => "bright-magenta", 96 => "bright-cyan", 97 => "bright-white"
     }.freeze
 
-    # GitLab CI log prefix: timestamp + stream id (e.g. "2026-03-18T21:10:26.489682Z 00O ")
-    # No \A anchor: prefixes appear at start of every line, and multiple can appear
-    # on the same display line when section markers consume their trailing newline.
-    GITLAB_PREFIX = /\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d+Z \d{2}[OE]\+? ?/
+    # GitLab CI stream id suffix after timestamp (e.g. " 00O ", " 01E+")
+    # Keep the timestamp, strip only the stream id
+    GITLAB_STREAM_ID = / \d{2}[OE]\+? ?/
 
     # GitLab CI section markers
     SECTION_MARKER = /section_(?:start|end):\d+:\w+(?:\[.*?\])?\r?\n?/
@@ -40,7 +39,7 @@ module Bells
       }.join("\n")
 
       # Strip GitLab-specific noise
-      text = text.gsub(GITLAB_PREFIX, "")
+      text = text.gsub(GITLAB_STREAM_ID, " ")
       text = text.gsub(SECTION_MARKER, "")
       text = text.gsub(CLEAR_SEQUENCE, "")
 
