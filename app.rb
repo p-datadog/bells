@@ -2,7 +2,9 @@
 
 require "sinatra"
 require "json"
+require "uri"
 require_relative "lib/bells"
+require_relative "lib/bells/ansi_to_html"
 require_relative "lib/bells/pr_cache"
 require_relative "lib/bells/etag_cache"
 require_relative "lib/bells/background_refresher"
@@ -218,8 +220,38 @@ post "/pr/:number/restart_category" do
   redirect "/pr/#{pr_number}?restarted=#{success_count}&failed=#{failure_count}"
 end
 
+get "/gitlab/log/:job_id" do
+  job_id = params[:job_id].to_i
+  project_path = params[:project] || "datadog/apm-reliability/dd-trace-rb"
+  job_name = params[:name]
+
+  client = Bells::GitLabClient.new
+  halt 503, "GitLab token not configured" unless client.available?
+
+  log = client.job_log(project_path, job_id)
+  halt 404, "Job log not found" unless log
+
+  @job_id = job_id
+  @job_name = job_name
+  @log_html = Bells::AnsiToHtml.convert(log)
+  @ansi_css = Bells::AnsiToHtml.css
+  @gitlab_url = "https://gitlab.ddbuild.io/#{project_path}/builds/#{job_id}"
+
+  # Job logs are immutable — cache in browser for 7 days
+  cache_control :public, max_age: 604800
+
+  erb :gitlab_log
+end
+
 helpers do
   def json(obj)
     obj.to_json
+  end
+
+  def gitlab_log_url(target_url)
+    parsed = Bells::GitLabClient.parse_target_url(target_url)
+    return nil unless parsed && parsed[:type] == :build
+
+    "/gitlab/log/#{parsed[:id]}?project=#{URI.encode_www_form_component(parsed[:project_path])}"
   end
 end

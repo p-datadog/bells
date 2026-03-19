@@ -1,0 +1,8 @@
+<h1>GitLab Job Log<% if @job_name %> - <%= @job_name %><% end %></h1>
+<p>
+  Job ID: <%= @job_id %> |
+  <a href="<%= @gitlab_url %>">View @ GitLab</a> |
+  <a href="javascript:history.back()">Back</a>
+</p>
+<style><%== @ansi_css %></style>
+<div class="log-viewer"><%== @log_html %></div>
