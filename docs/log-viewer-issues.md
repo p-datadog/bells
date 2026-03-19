@@ -56,6 +56,40 @@ Section marker lines often have `[0K` (clear-to-end-of-line) before the `section
 
 Processing order matters: `SECTION_MARKER` is stripped before `CLEAR_SEQUENCE`, which works because `SECTION_MARKER` matches starting at `section_start`, leaving `[0K` to be stripped in the next pass. Do not reorder these steps.
 
+## Issue 5: Scroll Position Not Restored on Reload (Open)
+
+**Symptom**: Reloading the page in Chrome moves the scroll position instead of staying where it was.
+
+**Root causes**:
+
+1. **`<style>` tags in `<body>` cause layout reflow during progressive rendering.** Chrome saves the scroll position before the reflow completes, then restores to that pixel offset after — but the content height has shifted so it lands in the wrong place. Fixed by moving all styles to `<head>` (done), but this alone did not fully resolve the issue.
+
+2. **Chrome scroll restoration is unreliable for large pages and aggressively cached pages.** The page is served with `Cache-Control: public, max-age=604800`. Chrome may treat a reload as a fresh navigation rather than a history restore, losing the saved scroll position. This is a known Chrome issue — see [whatwg/html #10597](https://github.com/whatwg/html/issues/10597) and [Next.js #37893](https://github.com/vercel/next.js/issues/37893).
+
+**What does NOT work**:
+- JavaScript sessionStorage save/restore added at the bottom of `<body>`: Chrome applies its own scroll restoration *after* `load`, overriding the manual `scrollTo`. The JS fights Chrome's restoration and makes it worse.
+- `history.scrollRestoration = 'manual'` set at the bottom of `<body>`: too late — Chrome has already queued its own restoration by then.
+
+**Correct fix** (not yet implemented): Set `history.scrollRestoration = 'manual'` in an inline `<script>` in `<head>` (before any rendering), then use sessionStorage to save on scroll and restore at end of body. The `<head>` placement prevents Chrome from ever queueing its own restoration.
+
+```html
+<!-- in <head> -->
+<script>history.scrollRestoration = 'manual';</script>
+
+<!-- at end of <body> -->
+<script>
+  const k = 'scroll:' + location.pathname + location.search;
+  const y = sessionStorage.getItem(k);
+  if (y !== null) window.scrollTo(0, +y);
+  window.addEventListener('scroll', () => sessionStorage.setItem(k, window.scrollY), { passive: true });
+</script>
+```
+
+**References**:
+- https://developer.chrome.com/blog/history-api-scroll-restoration
+- https://github.com/whatwg/html/issues/10597
+- https://www.aworkinprogress.dev/scroll-position-restoration--how-its-done--how-its-lost--and-how-its-fixed
+
 ## Non-Issue: `\r\n` Line Endings
 
 Many lines end with `\r\n`. The `\r` simulation (Issue 3 fix) handles these correctly: splitting on `\r` turns `content\r` (before the `\n`) into `["content", ""]`; the last non-empty segment is `"content"`. No separate `\r` stripping needed.
