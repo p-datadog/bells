@@ -268,7 +268,7 @@
     if (!url) return null;
     var match = url.match(/^https:\/\/([^\/]+)\/(.+)\/builds\/(\d+)$/);
     if (!match) return null;
-    return '/gitlab/log/' + match[3] + '?project=' + encodeURIComponent(match[2]);
+    return '/gitlab/log/' + match[3] + '?project=' + encodeURIComponent(match[2]) + '#first-error';
   }
 
   function renderLogLinks(failure) {

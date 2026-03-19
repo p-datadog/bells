@@ -260,6 +260,6 @@ helpers do
     parsed = Bells::GitLabClient.parse_target_url(target_url)
     return nil unless parsed && parsed[:type] == :build
 
-    "/gitlab/log/#{parsed[:id]}?project=#{URI.encode_www_form_component(parsed[:project_path])}"
+    "/gitlab/log/#{parsed[:id]}?project=#{URI.encode_www_form_component(parsed[:project_path])}#first-error"
   end
 end
