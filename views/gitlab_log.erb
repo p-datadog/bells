@@ -6,6 +6,7 @@
 </p>
 <div class="log-viewer"><%== @log_html %></div>
 <script>
+  history.scrollRestoration = 'manual';
   const scrollKey = 'scroll:' + location.pathname + location.search;
   const saved = sessionStorage.getItem(scrollKey);
   if (saved !== null) window.scrollTo(0, +saved);
